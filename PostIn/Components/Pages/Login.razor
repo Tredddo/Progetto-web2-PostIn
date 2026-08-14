@@ -1,0 +1,115 @@
+@page "/login"
+@using Microsoft.AspNetCore.Authorization
+@using PostIn.Components.Layout
+@layout LoginLayout
+@attribute [AllowAnonymous]
+@inject NavigationManager NavigationManager
+
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using Microsoft.EntityFrameworkCore
+@inject PostIn.Data.ApplicationDbContext _context
+
+@using PostIn.Data
+@using PostIn.Data.Entities
+@inject NavigationManager NavigationManager
+
+<PageTitle>Login - PostIn</PageTitle>
+
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 100vh;">
+    <div class="card shadow-lg border-0" style="max-width: 31.25em; width: 100%; border-radius: 1em;">
+        <div class="card-body px-4 px-md-5 pb-4 pb-md-5 pt-3 pt-md-4">
+            <RadzenText TextStyle="TextStyle.H1" class="rz-mb-1 rz-color-primary" Style="font-size: 3em; font-weight: 700;">
+                Post-In
+            </RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-5 rz-text-secondary">
+                Intranet Aziendale
+            </RadzenText>
+
+            <!-- Messaggio di errore -->
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Danger" AllowClose="false" class="rz-mb-4" Style="text-align: left;">
+                    @errorMessage
+                </RadzenAlert>
+            }
+
+            <EditForm Model="loginData" method="post" OnValidSubmit="OnSubmit" FormName="loginForm">
+                
+                <!-- Campo Username -->
+                <div class="rz-mb-4" style="text-align: left;">
+                    <RadzenLabel Text="Username" class="rz-mb-1" Style="font-weight: 600;" />
+                    <InputText @bind-Value="loginData.Username" class="rz-textbox w-100" placeholder="es. admin o l.verdi" />
+                </div>
+
+                <!-- Campo Password -->
+                <div class="rz-mb-4" style="text-align: left;">
+                    <RadzenLabel Text="Password" class="rz-mb-1" Style="font-weight: 600;" />
+                    <InputText type="password" @bind-Value="loginData.Password" class="rz-textbox w-100" placeholder="••••••••" />
+                </div>
+                
+                <!-- Pulsante Accedi -->
+                <div class="rz-mt-5">
+                    <button type="submit" class="rz-button rz-button-md rz-variant-flat rz-primary rz-shade-default w-100 rz-border-radius-2">
+                        <i class="rz-button-icon-left rzi">login</i>
+                        <span class="rz-button-text">Accedi</span>
+                    </button>
+                </div>
+
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    // Cattura la richiesta HTTP corrente
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
+    // Raccoglie i dati inviati dal form tramite HTTP POST
+    [SupplyParameterFromForm]
+    public LoginModel loginData { get; set; } = new();
+
+    private string? errorMessage;
+
+    private async Task OnSubmit()
+    {
+        // 1. Cerca l'utente nel DB
+        var dipendente = await _context.Dipendenti
+            .FirstOrDefaultAsync(d => d.Username.ToLower() == loginData.Username.ToLower());
+
+        // 2. Verifica la password
+        if (dipendente != null && dipendente.PasswordHash == loginData.Password)
+        {
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, dipendente.ID_Dipendente.ToString()),
+                new Claim(ClaimTypes.Name, dipendente.Username),
+                new Claim(ClaimTypes.GivenName, dipendente.Nome),
+                new Claim(ClaimTypes.Surname, dipendente.Cognome),
+                new Claim(ClaimTypes.Role, dipendente.Ruolo == 1 ? "Admin" : "User")
+            };
+
+            var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+            var principal = new ClaimsPrincipal(identity);
+
+            // 3. Esegue il login salvando il cookie nella richiesta HTTP corrente
+            if (HttpContext != null)
+            {
+                await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+                NavigationManager.NavigateTo("/");
+            }
+        }
+        else
+        {
+            errorMessage = "Username o password non corretti. Riprova.";
+        }
+    }
+
+    public class LoginModel
+    {
+        public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+    }
+}

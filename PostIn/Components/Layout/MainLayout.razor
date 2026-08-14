@@ -1,23 +1,77 @@
 ﻿@inherits LayoutComponentBase
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
-
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+<RadzenLayout>
+    <!-- TOPBAR -->
+    <RadzenHeader>
+        <div class="d-flex align-items-center justify-content-between p-2" style="width: 100%;">
+            <div class="d-flex align-items-center">
+                <RadzenSidebarToggle Click="@(() => sidebarExpanded = !sidebarExpanded)" />
+                <h3 class="mb-0 ms-2">PostIn</h3>
+            </div>
+            
+            <!-- Notifiche e Profilo Utente -->
+            <div class="d-flex align-items-center">
+                <RadzenIcon Icon="notifications" class="me-3" />
+                <AuthorizeView>
+                    <Authorized>
+                        <RadzenProfileMenu>
+                            <Template>
+                                <RadzenGravatar Email="@context.User.Identity?.Name" />
+                                <span class="ms-2">@context.User.Identity?.Name</span>
+                            </Template>
+                            <ChildContent>
+                                <RadzenProfileMenuItem Text="Impostazioni" Path="/settings" Icon="settings" />
+                                <RadzenProfileMenuItem Text="Logout" Path="/Account/Logout" Icon="logout" />
+                            </ChildContent>
+                        </RadzenProfileMenu>
+                    </Authorized>
+                    <NotAuthorized>
+                        <a href="/Account/Login">Accedi</a>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </div>
         </div>
+    </RadzenHeader>
 
-        <article class="content px-4">
+    <!-- SIDE PANEL -->
+    <RadzenSidebar @bind-Expanded="@sidebarExpanded">
+        <RadzenPanelMenu>
+            <!-- MACRO AREA: Menu -->
+            <div class="p-2 text-muted" style="font-size: 0.8rem; text-transform: uppercase;">Menu</div>
+            <RadzenPanelMenuItem Text="Feed" Path="/" Icon="home" />
+            <RadzenPanelMenuItem Text="Subscriptions" Path="/subscriptions" Icon="people" />
+
+            <!-- MACRO AREA: Personal Area -->
+            <div class="p-2 mt-3 text-muted" style="font-size: 0.8rem; text-transform: uppercase;">Personal Area</div>
+            <RadzenPanelMenuItem Text="Profile" Path="/profile" Icon="person" />
+            <RadzenPanelMenuItem Text="Saved Posts" Path="/saved" Icon="bookmark" />
+
+            <!-- MACRO AREA: History -->
+            <div class="p-2 mt-3 text-muted" style="font-size: 0.8rem; text-transform: uppercase;">History</div>
+            <RadzenPanelMenuItem Text="Ultime letture" Icon="history">
+                <RadzenPanelMenuItem Text="14:30 - Come usare Blazor" Path="/post/1" />
+                <RadzenPanelMenuItem Text="11:15 - Update HR 2026" Path="/post/2" />
+                <RadzenPanelMenuItem Text="Vedi tutta la cronologia" Path="/history" Icon="open_in_new" />
+            </RadzenPanelMenuItem>
+            
+            <!-- MACRO AREA: Trending -->
+            <div class="p-2 mt-3 text-muted" style="font-size: 0.8rem; text-transform: uppercase;">Trending</div>
+            <div class="p-2">
+                <div><RadzenBadge BadgeStyle="BadgeStyle.Primary" Text="1" /> #policy-smartworking</div>
+                <div class="mt-2"><RadzenBadge BadgeStyle="BadgeStyle.Secondary" Text="2" /> #team-building</div>
+            </div>
+        </RadzenPanelMenu>
+    </RadzenSidebar>
+
+    <!-- CORPO CENTRALE -->
+    <RadzenBody>
+        <div class="p-4">
             @Body
-        </article>
-    </main>
-</div>
+        </div>
+    </RadzenBody>
 
-<div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
-</div>
+</RadzenLayout>
+
+@code {
+    private bool sidebarExpanded = true;
+}
