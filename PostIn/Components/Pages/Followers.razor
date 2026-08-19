@@ -1,0 +1,157 @@
+@page "/followers"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using PostIn.Data
+@using PostIn.Data.Entities
+@using Radzen
+@using Radzen.Blazor
+@inject ApplicationDbContext DbContext
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+
+<PageTitle>I Miei Follower - PostIn</PageTitle>
+
+<RadzenNotification />
+
+<div class="mx-auto" style="max-width:52em;">
+
+    <!-- INTESTAZIONE -->
+    <header class="d-flex align-items-center gap-2 mb-4 pb-3 border-bottom">
+        <RadzenButton Icon="arrow_back" 
+                      Variant="Variant.Text" 
+                      ButtonStyle="ButtonStyle.Base" 
+                      Size="ButtonSize.Medium" 
+                      Click='() => NavigationManager.NavigateTo("/profile")' 
+                      aria-label="Torna al Profilo" />
+        <div>
+            <h1 class="h3 fw-bold text-dark mb-0">I Miei Follower</h1>
+            <p class="text-muted small mb-0">Colleghi che seguono i tuoi post e aggiornamenti</p>
+        </div>
+    </header>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
+        </div>
+    }
+    else if (!followers.Any())
+    {
+        <div class="card border-0 shadow-sm p-5 text-center" style="border-radius:1em;">
+            <RadzenIcon Icon="group_off" Style="font-size:3em; color:#94a3b8;" class="mb-3 d-block" />
+            <h2 class="h5 fw-bold text-dark">Nessun follower al momento</h2>
+            <p class="text-muted small mb-0">Pubblica nuovi post per farti notare e ottenere follower!</p>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex flex-column gap-2">
+            @foreach (var u in followers)
+            {
+                var isFollowingBack = followedUserIds.Contains(u.ID_Dipendente);
+
+                <div class="card border-0 shadow-sm p-3" style="border-radius:0.85em;">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-3">
+                            <RadzenGravatar Email="@u.Username" Style="width: 2.8em; height: 2.8em; border-radius: 50%;" />
+                            <div>
+                                <h2 class="h6 fw-bold mb-0 text-dark">@u.Nome @u.Cognome</h2>
+                                <span class="text-muted small">@@@u.Username</span>
+                            </div>
+                        </div>
+
+                        <RadzenButton Icon="@(isFollowingBack ? "person_remove" : "person_add")" 
+                                      Text="@(isFollowingBack ? "Non seguire più" : "Segui anche tu")" 
+                                      Variant="@(isFollowingBack ? Variant.Outlined : Variant.Filled)" 
+                                      ButtonStyle="@(isFollowingBack ? ButtonStyle.Secondary : ButtonStyle.Primary)" 
+                                      Size="ButtonSize.Small" 
+                                      Style="@(isFollowingBack ? "border-radius:0.5em; font-size:0.8rem;" : "border-radius:0.5em; font-size:0.8rem; background-color:#4f46e5;")" 
+                                      Click="() => ToggleFollowBack(u.ID_Dipendente)" />
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private bool isLoading = true;
+    private int currentUserId = 0;
+    private List<Dipendente> followers = new();
+    private HashSet<int> followedUserIds = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userIdClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        int.TryParse(userIdClaim, out currentUserId);
+
+        await CaricaFollowers();
+    }
+
+    private async Task CaricaFollowers()
+    {
+        isLoading = true;
+        try
+        {
+            followers = await (from f in DbContext.IscrizioniFollow
+                               join d in DbContext.Dipendenti on f.FK_Follower equals d.ID_Dipendente
+                               where f.FK_Followed == currentUserId
+                               select d).ToListAsync();
+
+            followedUserIds = (await DbContext.IscrizioniFollow
+                .Where(f => f.FK_Follower == currentUserId)
+                .Select(f => f.FK_Followed)
+                .ToListAsync()).ToHashSet();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ToggleFollowBack(int targetUserId)
+    {
+        try
+        {
+            var isFollowing = followedUserIds.Contains(targetUserId);
+
+            if (isFollowing)
+            {
+                var follow = await DbContext.IscrizioniFollow
+                    .FirstOrDefaultAsync(f => f.FK_Follower == currentUserId && f.FK_Followed == targetUserId);
+                if (follow != null)
+                {
+                    DbContext.IscrizioniFollow.Remove(follow);
+                    followedUserIds.Remove(targetUserId);
+                }
+            }
+            else
+            {
+                DbContext.IscrizioniFollow.Add(new IscrizioniFollow
+                {
+                    FK_Follower = currentUserId,
+                    FK_Followed = targetUserId,
+                    DataInizioInterazione = DateTime.UtcNow // <-- Proprietà in italiano
+                });
+                followedUserIds.Add(targetUserId);
+            }
+
+            await DbContext.SaveChangesAsync();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore",
+                Detail = ex.Message,
+                Duration = 2500
+            });
+        }
+    }
+}

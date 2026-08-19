@@ -11,13 +11,13 @@ public static class DbSeeder
         if (await context.Dipendenti.AnyAsync())
             return;
 
-        // --- 1. DIPENDENTI (1 Admin, 1 Utente Normale) ---
+        // DIPENDENTI
         var admin = new Dipendente
         {
             Nome = "Mario",
             Cognome = "Rossi",
             Username = "admin",
-            PasswordHash = "password", // In produzione usa un vero Hash!
+            PasswordHash = PasswordHelper.HashPassword("password"),
             Ruolo = 1, // 1 = Admin
             StatoAccount = 1,
             UltimoAccesso = DateTime.UtcNow
@@ -28,7 +28,7 @@ public static class DbSeeder
             Nome = "Luigi",
             Cognome = "Verdi",
             Username = "l.verdi",
-            PasswordHash = "password123",
+            PasswordHash = PasswordHelper.HashPassword("password123"),
             Ruolo = 0, // 0 = Utente Base
             StatoAccount = 1,
             UltimoAccesso = DateTime.UtcNow
@@ -37,15 +37,18 @@ public static class DbSeeder
         context.Dipendenti.AddRange(admin, user);
         await context.SaveChangesAsync(); // Salvo per generare gli ID
 
-        // --- 2. CATEGORIE ---
+        // CATEGORIE
         var catIT = new Categoria { NomeCategoria = "IT & Tech" };
         var catHR = new Categoria { NomeCategoria = "Risorse Umane" };
         var catPolicy = new Categoria { NomeCategoria = "Policy Aziendali" };
+        var cat1 = new Categoria { NomeCategoria = "1" };
+        var cat2 = new Categoria { NomeCategoria = "2" };
+        var cat3 = new Categoria { NomeCategoria = "3" };
 
-        context.Categorie.AddRange(catIT, catHR, catPolicy);
+        context.Categorie.AddRange(catIT, catHR, catPolicy, cat1, cat2, cat3);
         await context.SaveChangesAsync();
 
-        // --- 3. ARTICOLI ---
+        // ARTICOLI
         var articolo1 = new Articolo
         {
             Titolo = "Nuovo aggiornamento server 2026",
@@ -59,7 +62,7 @@ public static class DbSeeder
         {
             Titolo = "Guida al nuovo Smart Working",
             CorpoTesto = "Ecco le nuove regole per il lavoro da casa... // roba lunga",
-            ImmagineCopertina = "/images/smartworking.jpg",
+            ImmagineCopertina = "/uploads/covers/smartworking.jpg",
             DataOraCreazione = DateTime.UtcNow,
             FK_Autore = user.ID_Dipendente // L'utente scrive questo
         };
@@ -67,7 +70,7 @@ public static class DbSeeder
         context.Articoli.AddRange(articolo1, articolo2);
         await context.SaveChangesAsync();
 
-        // --- 4. TABELLE DI JOIN (Categorie, Preferiti, Follow, Likes) ---
+        // TABELLE DI JOIN (Categorie, Preferiti, Follow, Likes)
         
         // Assegno le categorie agli articoli
         context.ArticoloCategorie.AddRange(
@@ -105,7 +108,7 @@ public static class DbSeeder
             DataSalvataggio = DateTime.UtcNow
         });
 
-        // --- 5. COMMENTI & VISUALIZZAZIONI ---
+        // COMMENTI & VISUALIZZAZIONI
         context.Commenti.Add(new Commento
         {
             FK_Autore = user.ID_Dipendente,
@@ -121,7 +124,6 @@ public static class DbSeeder
             DataOraVisualizzazione = DateTime.UtcNow
         });
 
-        // Salvo tutto!
         await context.SaveChangesAsync();
     }
 }

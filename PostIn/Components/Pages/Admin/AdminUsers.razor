@@ -1,0 +1,409 @@
+@page "/admin/users"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using PostIn.Data
+@using PostIn.Data.Entities
+@using Radzen
+@using Radzen.Blazor
+
+@inject ApplicationDbContext DbContext
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NotificationService NotificationService
+
+<PageTitle>Gestione Utenti - Admin PostIn</PageTitle>
+
+<RadzenNotification />
+
+<div class="mx-auto" style="max-width: 72em;">
+
+    <!-- INTESTAZIONE ADMIN -->
+    <header class="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom flex-wrap gap-2">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge bg-danger px-2.5 py-1 text-uppercase fw-bold" style="font-size: 0.7rem; border-radius: 0.35rem; letter-spacing: 0.05em;">
+                    Admin
+                </span>
+                <h1 class="h3 fw-bold text-dark mb-0">Gestione Utenti</h1>
+            </div>
+            <p class="text-muted small mb-0">Supervisiona i profili aziendali, assegna ruoli amministrativi e gestisci lo stato degli account</p>
+        </div>
+
+        <div class="d-flex align-items-center gap-2">
+            <span class="count-badge-header">
+                Totale: <strong>@dipendenti.Count</strong>
+            </span>
+            <span class="admin-count-badge">
+                Admin: <strong>@dipendenti.Count(d => d.Ruolo == 1)</strong>
+            </span>
+        </div>
+    </header>
+
+    <!-- NAVIGAZIONE ADMIN -->
+    <div class="d-flex gap-2 mb-4 flex-wrap">
+        <a href="/admin/users" class="btn btn-sm px-3 py-1.5 fw-medium admin-nav-btn admin-nav-active">
+            <RadzenIcon Icon="group" Style="font-size: 0.95em;" class="me-1" /> Utenti
+        </a>
+        <a href="/admin/categories" class="btn btn-sm px-3 py-1.5 fw-medium admin-nav-btn admin-nav-inactive">
+            <RadzenIcon Icon="label" Style="font-size: 0.95em;" class="me-1" /> Categorie
+        </a>
+        <a href="/admin/posts" class="btn btn-sm px-3 py-1.5 fw-medium admin-nav-btn admin-nav-inactive">
+            <RadzenIcon Icon="article" Style="font-size: 0.95em;" class="me-1" /> Articoli
+        </a>
+    </div>
+
+    <!-- BARRA DI RICERCA -->
+    <RadzenCard class="rz-shadow-sm p-3 mb-4" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+        <div class="row align-items-center">
+            <div class="col-md-6 col-lg-5">
+                <div class="input-group" style="border-radius: 0.55rem; overflow: hidden;">
+                    <span class="input-group-text bg-light text-muted border-end-0">
+                        <RadzenIcon Icon="search" Style="font-size: 1.1em;" />
+                    </span>
+                    <input type="text"
+                           class="form-control border-start-0 modern-input"
+                           placeholder="Cerca per nome, cognome o username..."
+                           @bind="filtroRicerca"
+                           @bind:event="oninput" />
+                    @if (!string.IsNullOrWhiteSpace(filtroRicerca))
+                    {
+                        <button class="btn btn-light border-start-0 text-muted" type="button" @onclick="() => filtroRicerca = string.Empty">
+                            <RadzenIcon Icon="close" Style="font-size: 1em;" />
+                        </button>
+                    }
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-7 text-md-end mt-2 mt-md-0">
+                <span class="text-muted small">
+                    Risultati filtrati: <strong>@Filtrati.Count</strong> di <strong>@dipendenti.Count</strong> utenti
+                </span>
+            </div>
+        </div>
+    </RadzenCard>
+
+    <!-- TABELLA UTENTI -->
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
+            <p class="text-muted small mt-2">Caricamento elenco dipendenti...</p>
+        </div>
+    }
+    else
+    {
+        <RadzenCard class="rz-shadow-sm p-0 mb-5 overflow-hidden" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="px-4 py-3 fw-semibold text-muted small" style="font-size: 0.75rem;">ID</th>
+                            <th class="py-3 fw-semibold text-muted small" style="font-size: 0.75rem;">DIPENDENTE</th>
+                            <th class="py-3 fw-semibold text-muted small" style="font-size: 0.75rem;">USERNAME</th>
+                            <th class="py-3 fw-semibold text-muted small" style="font-size: 0.75rem;">RUOLO</th>
+                            <th class="py-3 fw-semibold text-muted small" style="font-size: 0.75rem;">STATO ACCOUNT</th>
+                            <th class="py-3 fw-semibold text-muted small" style="font-size: 0.75rem;">ULTIMO ACCESSO</th>
+                            <th class="py-3 fw-semibold text-muted small text-end pe-4" style="font-size: 0.75rem;">AZIONI</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Filtrati.Any())
+                        {
+                            <tr>
+                                <td colspan="7" class="text-center py-5 text-muted">
+                                    <RadzenIcon Icon="person_off" Style="font-size: 2.2em; color: #cbd5e1;" class="d-block mx-auto mb-2" />
+                                    <span class="small">Nessun utente corrisponde alla ricerca "<strong>@filtroRicerca</strong>".</span>
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var d in Filtrati)
+                            {
+                                var isCurrentUser = d.ID_Dipendente == currentUserId;
+                                var isDisabilitato = d.StatoAccount == 0;
+
+                                <tr class="@(isDisabilitato ? "table-light opacity-75" : "")">
+                                    <!-- ID -->
+                                    <td class="px-4 text-muted small fw-medium">#@d.ID_Dipendente</td>
+
+                                    <!-- Nome & Avatar -->
+                                    <td class="px-3 py-3" style="min-width: 16em;">
+                                        <div class="d-flex align-items-center gap-3">
+                                            <RadzenGravatar Email="@d.Username" 
+                                                            Style="width: 2.6em; height: 2.6em; border-radius: 0.55rem; flex-shrink: 0;" />
+                                            <div class="d-flex flex-column justify-content-center min-w-0">
+                                                <div class="d-inline-flex align-items-center gap-2">
+                                                    <span class="fw-bold text-dark text-truncate" style="font-size: 0.9rem; line-height: 1.2;">
+                                                        @d.Nome @d.Cognome
+                                                    </span>
+                                                    @if (isCurrentUser)
+                                                    {
+                                                        <span class="badge bg-primary-subtle text-primary border" 
+                                                            style="font-size: 0.65rem; border-radius: 0.35rem; padding: 0.2em 0.45em;">
+                                                            Tu
+                                                        </span>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+
+                                    <!-- Username -->
+                                    <td style="min-width: 10em;">
+                                        <span class="text-muted small">@@@d.Username</span>
+                                    </td>
+
+                                    <!-- Ruolo -->
+                                    <td style="min-width: 8em;">
+                                        @if (d.Ruolo == 1)
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1" style="font-size: 0.72rem; border-radius: 0.35rem;">
+                                                <RadzenIcon Icon="shield" Style="font-size: 0.85em;" class="me-0.5" /> Admin
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-light text-secondary border px-2 py-1" style="font-size: 0.72rem; border-radius: 0.35rem;">
+                                                Utente
+                                            </span>
+                                        }
+                                    </td>
+
+                                    <!-- Stato Account -->
+                                    <td style="min-width: 8em;">
+                                        @if (d.StatoAccount == 1)
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: 0.72rem; border-radius: 0.35rem;">
+                                                <RadzenIcon Icon="check_circle" Style="font-size: 0.85em;" class="me-0.5" /> Attivo
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary-subtle text-secondary border px-2 py-1" style="font-size: 0.72rem; border-radius: 0.35rem;">
+                                                <RadzenIcon Icon="block" Style="font-size: 0.85em;" class="me-0.5" /> Disabilitato
+                                            </span>
+                                        }
+                                    </td>
+
+                                    <!-- Ultimo Accesso -->
+                                    <td class="text-muted small" style="min-width: 10em; font-size: 0.78rem;">
+                                        @(d.UltimoAccesso.HasValue ? d.UltimoAccesso.Value.ToLocalTime().ToString("dd MMM yyyy, HH:mm") : "Mai effettuato")
+                                    </td>
+
+                                    <!-- Azioni -->
+                                    <td class="text-end pe-4" style="min-width: 8em;">
+                                        <div class="d-flex justify-content-end gap-1.5">
+                                            
+                                            <!-- Promuovi / Revoca Ruolo Admin -->
+                                            <RadzenButton Icon="@(d.Ruolo == 1 ? "remove_moderator" : "admin_panel_settings")"
+                                                          Variant="Variant.Outlined"
+                                                          ButtonStyle="@(d.Ruolo == 1 ? ButtonStyle.Secondary : ButtonStyle.Primary)"
+                                                          Size="ButtonSize.Small"
+                                                          Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
+                                                          Disabled="@(isActionLoading || isCurrentUser)"
+                                                          Title="@(isCurrentUser ? "Non puoi modificare il tuo stesso ruolo" : (d.Ruolo == 1 ? "Revoca privilegi Admin" : "Promuovi ad Admin"))"
+                                                          Click="() => ToggleRuolo(d)" />
+
+                                            <!-- Attiva / Disattiva Account -->
+                                            <RadzenButton Icon="@(d.StatoAccount == 1 ? "block" : "check_circle")"
+                                                          Variant="Variant.Outlined"
+                                                          ButtonStyle="@(d.StatoAccount == 1 ? ButtonStyle.Danger : ButtonStyle.Success)"
+                                                          Size="ButtonSize.Small"
+                                                          Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
+                                                          Disabled="@(isActionLoading || isCurrentUser)"
+                                                          Title="@(isCurrentUser ? "Non puoi disabilitare il tuo account" : (d.StatoAccount == 1 ? "Disabilita account" : "Riattiva account"))"
+                                                          Click="() => ToggleStato(d)" />
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </RadzenCard>
+    }
+</div>
+
+<style>
+    .count-badge-header {
+        background-color: #f8fafc;
+        color: #475569;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.55rem;
+        padding: 0.35rem 0.75rem;
+        font-size: 0.8rem;
+    }
+
+    .admin-count-badge {
+        background-color: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+        border-radius: 0.55rem;
+        padding: 0.35rem 0.75rem;
+        font-size: 0.8rem;
+    }
+
+    .admin-nav-btn {
+        border-radius: 0.55rem !important;
+        transition: all 0.15s ease;
+    }
+    .admin-nav-active {
+        background-color: #4f46e5 !important;
+        color: #ffffff !important;
+        border: 1px solid #4f46e5 !important;
+        box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+    }
+    .admin-nav-inactive {
+        background-color: #ffffff !important;
+        color: #475569 !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+    .admin-nav-inactive:hover {
+        background-color: #f1f5f9 !important;
+        color: #1e293b !important;
+    }
+
+    .modern-input:focus {
+        background-color: #ffffff !important;
+        box-shadow: none !important;
+        border-color: #818cf8 !important;
+    }
+</style>
+
+@code {
+    private bool isLoading = true;
+    private bool isActionLoading = false;
+    private string filtroRicerca = string.Empty;
+    private int currentUserId = 0;
+    private List<Dipendente> dipendenti = new();
+
+    private List<Dipendente> Filtrati => dipendenti
+        .Where(d => string.IsNullOrWhiteSpace(filtroRicerca) ||
+                    $"{d.Nome} {d.Cognome}".Contains(filtroRicerca, StringComparison.OrdinalIgnoreCase) ||
+                    d.Username.Contains(filtroRicerca, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userIdClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        int.TryParse(userIdClaim, out currentUserId);
+
+        await CaricaDipendenti();
+    }
+
+    private async Task CaricaDipendenti()
+    {
+        isLoading = true;
+        try
+        {
+            dipendenti = await DbContext.Dipendenti
+                .AsNoTracking()
+                .OrderBy(d => d.Cognome)
+                .ThenBy(d => d.Nome)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore di Caricamento",
+                Detail = ex.Message,
+                Duration = 3500
+            });
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ToggleRuolo(Dipendente target)
+    {
+        if (isActionLoading || target.ID_Dipendente == currentUserId) return;
+        isActionLoading = true;
+
+        try
+        {
+            var d = await DbContext.Dipendenti.FindAsync(target.ID_Dipendente);
+            if (d != null)
+            {
+                d.Ruolo = d.Ruolo == 1 ? 0 : 1;
+                await DbContext.SaveChangesAsync();
+
+                var nuovoRuolo = d.Ruolo == 1 ? "Amministratore" : "Utente standard";
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Ruolo Aggiornato",
+                    Detail = $"{d.Nome} {d.Cognome} è ora {nuovoRuolo}.",
+                    Duration = 2500
+                });
+
+                await CaricaDipendenti();
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore",
+                Detail = $"Impossibile modificare il ruolo: {ex.Message}",
+                Duration = 3500
+            });
+        }
+        finally
+        {
+            isActionLoading = false;
+        }
+    }
+
+    private async Task ToggleStato(Dipendente target)
+    {
+        if (isActionLoading || target.ID_Dipendente == currentUserId) return;
+        isActionLoading = true;
+
+        try
+        {
+            var d = await DbContext.Dipendenti.FindAsync(target.ID_Dipendente);
+            if (d != null)
+            {
+                d.StatoAccount = d.StatoAccount == 1 ? 0 : 1;
+                await DbContext.SaveChangesAsync();
+
+                var statoDescrizione = d.StatoAccount == 1 ? "riattivato" : "disabilitato";
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = d.StatoAccount == 1 ? NotificationSeverity.Success : NotificationSeverity.Warning,
+                    Summary = "Stato Modificato",
+                    Detail = $"Account di {d.Nome} {d.Cognome} {statoDescrizione}.",
+                    Duration = 2500
+                });
+
+                await CaricaDipendenti();
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore",
+                Detail = $"Impossibile aggiornare lo stato: {ex.Message}",
+                Duration = 3500
+            });
+        }
+        finally
+        {
+            isActionLoading = false;
+        }
+    }
+}

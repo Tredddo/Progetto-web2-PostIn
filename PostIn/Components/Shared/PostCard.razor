@@ -1,0 +1,157 @@
+@using PostIn.Data.Entities
+@using Radzen
+@using Radzen.Blazor
+
+<RadzenCard class="rz-shadow-sm p-4 mb-3 modern-postcard" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+    
+    <!-- HEADER: Autore, Gravatar, Data & Categorie -->
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="d-flex align-items-center gap-3">
+            <RadzenGravatar Email="@Post.Autore?.Username" Style="width: 2.6em; height: 2.6em; border-radius: 0.55rem; flex-shrink: 0;" />
+            <div class="d-flex flex-column justify-content-center">
+                <span class="fw-bold text-dark d-block" style="font-size: 0.95rem; line-height: 1.15; margin-bottom: 2px;">
+                    @Post.Autore?.Nome @Post.Autore?.Cognome
+                </span>
+                <span class="text-muted" style="font-size: 0.75rem; line-height: 1.15;">
+                    @@@Post.Autore?.Username · @Post.DataOraCreazione.ToLocalTime().ToString("dd MMM yyyy, HH:mm")
+                </span>
+            </div>
+        </div>
+
+        <!-- Categorie (Badge Rettangolari Stondati) -->
+        <div class="d-flex flex-wrap gap-1.5">
+            @foreach (var ac in Post.ArticoloCategorie)
+            {
+                <span class="category-badge">
+                    #@ac.Categoria?.NomeCategoria
+                </span>
+            }
+        </div>
+    </div>
+
+    <!-- IMMAGINE DI COPERTINA (Opzionale) -->
+    @if (!string.IsNullOrWhiteSpace(Post.ImmagineCopertina))
+    {
+        <div class="mb-3 overflow-hidden border shadow-sm" style="border-radius: 0.65rem; max-height: 14em;">
+            <img src="@Post.ImmagineCopertina" 
+                 alt="@Post.Titolo" 
+                 class="w-100 h-100" 
+                 style="object-fit: cover; max-height: 14em;" />
+        </div>
+    }
+
+    <!-- TITOLO & ANTEPRIMA -->
+    <h2 class="h5 fw-bold text-dark mb-2">
+        <a href="/post/@Post.ID_Articolo" class="text-dark text-decoration-none post-title-link">
+            @Post.Titolo
+        </a>
+    </h2>
+
+    <p class="text-secondary small mb-3 post-preview-text" style="line-height: 1.6;">
+        @AnteprimaTesto
+    </p>
+
+    <!-- BARRA INTERATTIVA INFERIORE -->
+    <div class="d-flex align-items-center justify-content-between pt-3 border-top">
+        <div class="d-flex align-items-center gap-2">
+            <!-- Pulsante Like -->
+            <button type="button"
+                    class="btn btn-sm d-inline-flex align-items-center gap-1.5 px-3 py-1.5 fw-semibold transition-all action-rect-btn @(IsLiked ? "btn-like-active" : "btn-light text-secondary border")"
+                    @onclick="() => OnLike.InvokeAsync(Post.ID_Articolo)">
+                <RadzenIcon Icon="@(IsLiked ? "favorite" : "favorite_border")" 
+                            Style="@(IsLiked ? "font-size: 1.1em; color: #ef4444;" : "font-size: 1.1em;")" />
+                <span>@(Post.Likes?.Count ?? 0)</span>
+            </button>
+
+            <!-- Pulsante Salva / Salvato (Evidenziato in giallo) -->
+            <button type="button"
+                    class="btn btn-sm d-inline-flex align-items-center gap-1.5 px-3 py-1.5 fw-semibold transition-all action-rect-btn @(IsBookmarked ? "btn-bookmark-active" : "btn-light text-secondary border")"
+                    @onclick="() => OnBookmark.InvokeAsync(Post.ID_Articolo)">
+                <RadzenIcon Icon="@(IsBookmarked ? "bookmark" : "bookmark_border")" 
+                            Style="@(IsBookmarked ? "font-size: 1.1em; color: #d97706;" : "font-size: 1.1em;")" />
+                <span>@(IsBookmarked ? "Salvato" : "Salva")</span>
+            </button>
+        </div>
+
+        <!-- Pulsante Leggi Post -->
+        <a href="/post/@Post.ID_Articolo" class="btn btn-sm btn-link text-decoration-none fw-bold text-primary p-0 d-flex align-items-center gap-1">
+            Leggi Post
+            <RadzenIcon Icon="arrow_forward" Style="font-size: 0.9em;" />
+        </a>
+    </div>
+</RadzenCard>
+
+<style>
+    .modern-postcard {
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .modern-postcard:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06) !important;
+    }
+    .post-title-link:hover {
+        color: #4f46e5 !important;
+    }
+
+    /* Badge categoria rettangolari con bordi morbidi */
+    .category-badge {
+        background-color: #f1f5f9;
+        color: #4338ca;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.45rem;
+        padding: 0.2rem 0.6rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    /* Pulsanti rettangolari stondati */
+    .action-rect-btn {
+        border-radius: 0.55rem !important;
+        font-size: 0.82rem;
+    }
+
+    /* Stile Like Attivo */
+    .btn-like-active {
+        background-color: #fee2e2 !important;
+        color: #b91c1c !important;
+        border: 1px solid #fca5a5 !important;
+    }
+
+    /* Stile Bookmark Attivo (Giallo / Ambra) */
+    .btn-bookmark-active {
+        background-color: #fef3c7 !important;
+        color: #b45309 !important;
+        border: 1px solid #fcd34d !important;
+        box-shadow: 0 0 8px rgba(245, 158, 11, 0.25) !important;
+    }
+    .btn-bookmark-active:hover {
+        background-color: #fde68a !important;
+        color: #92400e !important;
+    }
+
+    .transition-all {
+        transition: all 0.15s ease-in-out;
+    }
+</style>
+
+@code {
+    [Parameter, EditorRequired]
+    public Articolo Post { get; set; } = null!;
+
+    [Parameter]
+    public bool IsLiked { get; set; } = false;
+
+    [Parameter]
+    public bool IsBookmarked { get; set; } = false;
+
+    [Parameter]
+    public EventCallback<int> OnLike { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnBookmark { get; set; }
+
+    private string AnteprimaTesto =>
+        string.IsNullOrWhiteSpace(Post.CorpoTesto)
+            ? string.Empty
+            : (Post.CorpoTesto.Length <= 160 ? Post.CorpoTesto : $"{Post.CorpoTesto.Substring(0, 157)}...");
+}

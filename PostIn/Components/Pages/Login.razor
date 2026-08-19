@@ -3,7 +3,6 @@
 @using PostIn.Components.Layout
 @layout LoginLayout
 @attribute [AllowAnonymous]
-@inject NavigationManager NavigationManager
 
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authentication
@@ -75,13 +74,24 @@
 
     private async Task OnSubmit()
     {
-        // 1. Cerca l'utente nel DB
+        var username = loginData.Username.Trim().ToLowerInvariant();
+        
+        // Cerca il dipendente
         var dipendente = await _context.Dipendenti
-            .FirstOrDefaultAsync(d => d.Username.ToLower() == loginData.Username.ToLower());
+            .FirstOrDefaultAsync(d => d.Username.ToLower() == username);
 
-        // 2. Verifica la password
-        if (dipendente != null && dipendente.PasswordHash == loginData.Password)
+        // Verifica hash della password con PasswordHelper
+        if (dipendente != null && PasswordHelper.VerifyPassword(loginData.Password, dipendente.PasswordHash))
         {
+            if (dipendente.StatoAccount != 1)
+            {
+                errorMessage = "Account disabilitato. Contatta l'amministratore.";
+                return;
+            }
+
+            dipendente.UltimoAccesso = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, dipendente.ID_Dipendente.ToString()),
@@ -94,11 +104,10 @@
             var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
             var principal = new ClaimsPrincipal(identity);
 
-            // 3. Esegue il login salvando il cookie nella richiesta HTTP corrente
             if (HttpContext != null)
             {
                 await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
-                NavigationManager.NavigateTo("/");
+                NavigationManager.NavigateTo("/", forceLoad: true);
             }
         }
         else

@@ -1,0 +1,218 @@
+@page "/history"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using PostIn.Data
+@using PostIn.Data.Entities
+@using Radzen
+@using Radzen.Blazor
+
+@inject ApplicationDbContext DbContext
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+
+<PageTitle>Cronologia Letture - PostIn</PageTitle>
+
+<div class="mx-auto" style="max-width: 52em;">
+
+    <!-- INTESTAZIONE PAGINA -->
+    <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+        <div>
+            <div class="d-flex align-items-center gap-2">
+                <RadzenIcon Icon="history" Style="font-size: 1.6em; color: #4f46e5;" />
+                <h1 class="h3 fw-bold text-dark mb-0">Cronologia Letture</h1>
+            </div>
+            <p class="text-muted small mb-0 mt-1">Tutti i post che hai consultato all'interno della piattaforma</p>
+        </div>
+
+        @if (!isLoading && cronologia.Any())
+        {
+            <span class="count-badge-header">
+                <strong>@ArticoliUniciCount</strong> @(ArticoliUniciCount == 1 ? "post letto" : "post letti")
+            </span>
+        }
+    </header>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
+            <p class="text-muted mt-3 small">Caricamento della tua cronologia...</p>
+        </div>
+    }
+    else if (!cronologia.Any())
+    {
+        <RadzenCard class="rz-shadow-sm p-5 text-center" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+            <RadzenIcon Icon="menu_book" Style="font-size: 3em; color: #94a3b8;" class="mb-3 d-block" />
+            <h2 class="h5 fw-bold text-dark mb-1">Nessun post nella cronologia</h2>
+            <p class="text-muted small mb-3">I post che apri e leggi nel Feed compariranno automaticamente qui.</p>
+            <div>
+                <RadzenButton Icon="dynamic_feed"
+                              Text="Esplora il Feed"
+                              ButtonStyle="ButtonStyle.Primary"
+                              Size="ButtonSize.Small"
+                              Style="background-color: #4f46e5; border-radius: 0.55rem;"
+                              Click='() => NavigationManager.NavigateTo("/")' />
+            </div>
+        </RadzenCard>
+    }
+    else
+    {
+        <div class="d-flex flex-column gap-4 mb-5">
+            @foreach (var gruppo in RaggruppaLetture())
+            {
+                <section aria-labelledby="heading-gruppo-@gruppo.Key.Replace(" ", "-")">
+                    <!-- Intestazione Periodo (Oggi, Ieri, Data) -->
+                    <div class="d-flex align-items-center gap-2 mb-2 px-1">
+                        <RadzenIcon Icon="calendar_today" Style="font-size: 0.95em; color: #64748b;" />
+                        <h2 id="heading-gruppo-@gruppo.Key.Replace(" ", "-")" 
+                            class="fw-bold text-uppercase text-muted mb-0" 
+                            style="font-size: 0.75rem; letter-spacing: 0.05em;">
+                            @gruppo.Key
+                        </h2>
+                    </div>
+
+                    <!-- Lista Post del Periodo -->
+                    <div class="d-flex flex-column gap-2">
+                        @foreach (var item in gruppo.Value)
+                        {
+                            var articolo = item.Articolo;
+                            var primaCategoria = articolo?.ArticoloCategorie?.FirstOrDefault()?.Categoria?.NomeCategoria;
+
+                            <RadzenCard class="rz-shadow-sm p-3 history-card" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                                    
+                                    <!-- Info Post & Autore -->
+                                    <div class="d-flex align-items-center gap-3 flex-grow-1 min-w-0">
+                                        <RadzenGravatar Email="@articolo?.Autore?.Username" Style="width: 2.6em; height: 2.6em; border-radius: 0.55rem; flex-shrink: 0;" />
+
+                                        <div class="min-w-0">
+                                            <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                                                @if (!string.IsNullOrEmpty(primaCategoria))
+                                                {
+                                                    <span class="category-badge-sm">
+                                                        #@primaCategoria
+                                                    </span>
+                                                }
+                                                <span class="text-muted small" style="font-size: 0.75rem;">
+                                                    Autore: <strong>@(articolo?.Autore != null ? $"{articolo.Autore.Nome} {articolo.Autore.Cognome}" : "Anonimo")</strong>
+                                                </span>
+                                            </div>
+
+                                            <h3 class="h6 fw-bold mb-0 text-truncate">
+                                                <a href="/post/@item.FK_Articolo" class="text-dark text-decoration-none history-title-link">
+                                                    @(articolo?.Titolo ?? "Post non disponibile")
+                                                </a>
+                                            </h3>
+                                        </div>
+                                    </div>
+
+                                    <!-- Orario & Bottone Riapri -->
+                                    <div class="d-flex align-items-center gap-3 ms-auto flex-shrink-0">
+                                        <time datetime="@item.DataOraVisualizzazione.ToString("yyyy-MM-ddTHH:mm:ssZ")" class="text-muted small d-flex align-items-center gap-1" style="font-size: 0.78rem;">
+                                            <RadzenIcon Icon="schedule" Style="font-size: 1em; color: #94a3b8;" />
+                                            <span>@item.DataOraVisualizzazione.ToLocalTime().ToString("HH:mm")</span>
+                                        </time>
+
+                                        <RadzenButton Text="Rileggi"
+                                                      Icon="arrow_forward"
+                                                      Variant="Variant.Outlined"
+                                                      ButtonStyle="ButtonStyle.Primary"
+                                                      Size="ButtonSize.Small"
+                                                      Style="border-radius: 0.55rem; font-size: 0.78rem; padding: 0.25rem 0.65rem;"
+                                                      Click='() => NavigationManager.NavigateTo($"/post/{item.FK_Articolo}")' />
+                                    </div>
+
+                                </div>
+                            </RadzenCard>
+                        }
+                    </div>
+                </section>
+            }
+        </div>
+    }
+
+</div>
+
+<style>
+    .count-badge-header {
+        background-color: #f8fafc;
+        color: #475569;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.55rem;
+        padding: 0.35rem 0.75rem;
+        font-size: 0.8rem;
+    }
+
+    .category-badge-sm {
+        background-color: #f1f5f9;
+        color: #4338ca;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.35rem;
+        padding: 0.1rem 0.45rem;
+        font-size: 0.7rem;
+        font-weight: 500;
+    }
+
+    .history-card {
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .history-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05) !important;
+    }
+
+    .history-title-link:hover {
+        color: #4f46e5 !important;
+    }
+</style>
+
+@code {
+    private bool isLoading = true;
+    private List<Visualizzazione> cronologia = new();
+
+    // Calcola il numero di articoli distinti tramite ID (FK_Articolo)
+    private int ArticoliUniciCount => cronologia.Select(v => v.FK_Articolo).Distinct().Count();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userIdClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (int.TryParse(userIdClaim, out int userId))
+        {
+            cronologia = await DbContext.Visualizzazioni
+                .AsNoTracking()
+                .Where(v => v.FK_Dipendente == userId)
+                .Include(v => v.Articolo)
+                    .ThenInclude(a => a!.Autore)
+                .Include(v => v.Articolo)
+                    .ThenInclude(a => a!.ArticoloCategorie)
+                        .ThenInclude(ac => ac.Categoria)
+                .OrderByDescending(v => v.DataOraVisualizzazione)
+                .ToListAsync();
+        }
+
+        isLoading = false;
+    }
+
+    // Helper LINQ per dividere le letture in sezioni temporali (Oggi, Ieri, Data estesa)
+    private IEnumerable<KeyValuePair<string, List<Visualizzazione>>> RaggruppaLetture()
+    {
+        var oggi = DateTime.Today;
+        var ieri = oggi.AddDays(-1);
+
+        return cronologia
+            .GroupBy(v =>
+            {
+                var dataLocale = v.DataOraVisualizzazione.ToLocalTime().Date;
+                if (dataLocale == oggi) return "Oggi";
+                if (dataLocale == ieri) return "Ieri";
+                return dataLocale.ToString("dd MMMM yyyy");
+            })
+            .ToDictionary(g => g.Key, g => g.ToList());
+    }
+}

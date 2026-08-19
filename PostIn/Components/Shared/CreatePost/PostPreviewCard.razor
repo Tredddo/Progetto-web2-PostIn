@@ -1,0 +1,67 @@
+@using PostIn.Data.Entities
+@using Radzen
+@using Radzen.Blazor
+
+<div class="card border-0 shadow-sm p-4 mb-4 preview-card" style="border-radius: 1.1rem;">
+    <div class="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom text-muted small">
+        <span>
+            <RadzenIcon Icon="preview" Style="font-size: 1em;" class="me-1" />
+            Anteprima di visualizzazione
+        </span>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(ImmagineCopertina))
+    {
+        <div class="mb-4 rounded-4 overflow-hidden shadow-sm" style="max-height: 18em;">
+            <img src="@ImmagineCopertina" 
+                 alt="Copertina" 
+                 class="w-100 h-100" 
+                 style="object-fit: cover; max-height: 18em;" 
+                 @onerror="OnImageError" />
+        </div>
+    }
+
+    <h1 class="fw-bolder text-dark mb-3">
+        @(string.IsNullOrWhiteSpace(Titolo) ? "Titolo dell'articolo..." : Titolo)
+    </h1>
+
+    <!-- Categorie collegate -->
+    <div class="d-flex flex-wrap gap-1.5 mb-4">
+        @if (CategorieSelezionate.Any())
+        {
+            @foreach (var catId in CategorieSelezionate)
+            {
+                var cat = Categorie.FirstOrDefault(c => c.ID_Categoria == catId);
+                if (cat != null)
+                {
+                    <span class="badge bg-light text-primary border px-2.5 py-1 rounded-pill small">#@cat.NomeCategoria</span>
+                }
+            }
+        }
+        else
+        {
+            <span class="text-muted small fst-italic">Nessuna categoria associata</span>
+        }
+    </div>
+
+    <!-- Corpo del testo -->
+    <div class="post-preview-body text-secondary" style="line-height: 1.8; white-space: pre-wrap; font-size: 1.02rem;">
+        @(string.IsNullOrWhiteSpace(CorpoTesto) ? "Inizia a scrivere nell'editor per vedere qui l'anteprima formattata..." : CorpoTesto)
+    </div>
+</div>
+
+<style>
+    .preview-card {
+        background: #ffffff;
+        border: 1px solid rgba(226, 232, 240, 0.9) !important;
+    }
+</style>
+
+@code {
+    [Parameter] public string Titolo { get; set; } = string.Empty;
+    [Parameter] public string CorpoTesto { get; set; } = string.Empty;
+    [Parameter] public string? ImmagineCopertina { get; set; }
+    [Parameter] public List<Categoria> Categorie { get; set; } = new();
+    [Parameter] public HashSet<int> CategorieSelezionate { get; set; } = new();
+    [Parameter] public EventCallback OnImageError { get; set; }
+}

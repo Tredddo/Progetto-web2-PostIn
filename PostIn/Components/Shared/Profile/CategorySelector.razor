@@ -1,0 +1,163 @@
+@using Radzen
+@using Radzen.Blazor
+@using PostIn.Data.Entities
+
+<div class="card border-0 shadow-sm p-4 mb-4" style="border-radius:1em;">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+        <h2 class="h5 fw-bold mb-0 d-flex align-items-center gap-2">
+            <RadzenIcon Icon="favorite" Style="font-size:1.2em; color:#ef4444;" />
+            Categorie Preferite
+        </h2>
+        <span class="badge bg-primary text-white px-2 py-1 rounded-pill" style="font-size:0.75em;">
+            @SelectedCategoryIds.Count attive
+        </span>
+    </div>
+    <p class="text-muted small mb-3">Seleziona le categorie per filtrare il tuo feed personale.</p>
+
+    @if (!Categories.Any())
+    {
+        <div class="text-center py-3 text-muted small">
+            Nessuna categoria disponibile nel sistema.
+        </div>
+    }
+    else
+    {
+        <!-- Barra di ricerca rapida con pulsante reset -->
+        <div class="input-group input-group-sm mb-2">
+            <span class="input-group-text bg-light border-end-0 text-muted">
+                <RadzenIcon Icon="search" Style="font-size: 1em;" />
+            </span>
+            <input type="text"
+                   class="form-control bg-light border-start-0 ps-0"
+                   placeholder="Cerca categoria..."
+                   @bind="filtroCategoria"
+                   @bind:event="oninput" />
+            @if (!string.IsNullOrEmpty(filtroCategoria))
+            {
+                <button class="btn btn-light border border-start-0 text-muted" type="button" @onclick="() => filtroCategoria = string.Empty">
+                    <RadzenIcon Icon="close" Style="font-size: 0.9em;" />
+                </button>
+            }
+        </div>
+
+        <!-- Contenitore a scorrimento -->
+        <div class="category-scroll-container mb-3">
+            @if (!CategorieFiltrate.Any())
+            {
+                <div class="p-3 text-center text-muted small bg-light rounded-2">
+                    Nessun risultato per "<em>@filtroCategoria</em>"
+                </div>
+            }
+            else
+            {
+                @foreach (var cat in CategorieFiltrate)
+                {
+                    var isSelected = SelectedCategoryIds.Contains(cat.ID_Categoria);
+                    <div @key="cat.ID_Categoria"
+                         class="category-row d-flex align-items-center justify-content-between p-2 rounded-2 @(isSelected ? "category-row-active" : "") @(IsDisabled ? "opacity-50 pointer-events-none" : "")"
+                         @onclick="() => HandleToggle(cat.ID_Categoria)">
+                        
+                        <div class="d-flex align-items-center gap-2 user-select-none">
+                            <input type="checkbox"
+                                   class="form-check-input mt-0"
+                                   checked="@isSelected"
+                                   disabled="@IsDisabled"
+                                   style="pointer-events: none;" />
+                            <span class="small fw-medium">#@cat.NomeCategoria</span>
+                        </div>
+
+                        @if (isSelected)
+                        {
+                            <RadzenIcon Icon="star" Style="font-size: 0.95em; color: #f59e0b;" />
+                        }
+                    </div>
+                }
+            }
+        </div>
+
+        @if (!string.IsNullOrEmpty(Message))
+        {
+            <div class="alert alert-success py-2 px-3 mb-0 small d-flex align-items-center gap-2" role="alert" style="border-radius: 0.5em;">
+                <RadzenIcon Icon="done" Style="font-size: 1.1em;" />
+                <span>@Message</span>
+            </div>
+        }
+    }
+</div>
+
+<style>
+    .category-scroll-container {
+        max-height: 230px;
+        overflow-y: auto;
+        padding-right: 5px;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+
+    .category-scroll-container::-webkit-scrollbar {
+        width: 5px;
+    }
+    .category-scroll-container::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 4px;
+    }
+    .category-scroll-container::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+    }
+    .category-scroll-container::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+    }
+
+    .category-row {
+        background-color: #f8fafc;
+        border: 1px solid #f1f5f9;
+        cursor: pointer;
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+    .category-row:hover {
+        background-color: #f1f5f9;
+        border-color: #e2e8f0;
+    }
+    .category-row-active {
+        background-color: #eef2ff !important;
+        border-color: #c7d2fe !important;
+    }
+    .pointer-events-none {
+        pointer-events: none;
+    }
+</style>
+
+@code {
+    [Parameter, EditorRequired]
+    public List<Categoria> Categories { get; set; } = new();
+
+    [Parameter, EditorRequired]
+    public HashSet<int> SelectedCategoryIds { get; set; } = new();
+
+    [Parameter]
+    public bool IsDisabled { get; set; } = false;
+
+    [Parameter]
+    public string Message { get; set; } = string.Empty;
+
+    [Parameter]
+    public EventCallback<int> OnToggle { get; set; }
+
+    private string filtroCategoria = string.Empty;
+
+    private IEnumerable<Categoria> CategorieFiltrate =>
+        string.IsNullOrWhiteSpace(filtroCategoria)
+            ? Categories
+            : Categories.Where(c => c.NomeCategoria.Contains(filtroCategoria, StringComparison.OrdinalIgnoreCase));
+
+    private async Task HandleToggle(int categoriaId)
+    {
+        if (IsDisabled) return;
+        if (OnToggle.HasDelegate)
+        {
+            await OnToggle.InvokeAsync(categoriaId);
+        }
+    }
+}

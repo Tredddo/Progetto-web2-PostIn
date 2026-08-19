@@ -1,0 +1,90 @@
+@using Radzen
+@using Radzen.Blazor
+@using PostIn.Data.Entities
+@inject NavigationManager NavigationManager
+
+<div class="card border-0 shadow-sm p-4" style="border-radius:1em;">
+    <h2 class="h5 fw-bold mb-3 d-flex align-items-center gap-2">
+        <RadzenIcon Icon="article" Style="font-size:1.2em; color:#6366f1;" />
+        I Miei Post
+    </h2>
+
+    @if (Posts == null || !Posts.Any())
+    {
+        <div class="text-center py-4 text-muted">
+            <RadzenIcon Icon="edit_off" Style="font-size:2em; color:#94a3b8;" class="mb-2 d-block" />
+            <p class="small mb-3">Non hai ancora pubblicato nulla.</p>
+            <a href="/create-post" class="btn btn-primary btn-sm fw-semibold" style="border-radius:0.55em; background:#4f46e5; border:none;">
+                <RadzenIcon Icon="add" Style="font-size:0.9em;" class="me-1" />
+                Scrivi il tuo primo articolo
+            </a>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex flex-column gap-2 mb-3">
+            @foreach (var art in Posts.OrderByDescending(a => a.DataOraCreazione))
+            {
+                <div class="p-3 rounded-3 bg-light d-flex justify-content-between align-items-center gap-2">
+                    <div class="flex-grow-1 min-w-0">
+                        <a href="/post/@art.ID_Articolo"
+                           class="fw-semibold text-dark text-decoration-none profile-post-link d-block text-truncate"
+                           style="font-size:0.92em;">
+                            @art.Titolo
+                        </a>
+                        <span class="text-muted" style="font-size:0.75em;">
+                            @art.DataOraCreazione.ToLocalTime().ToString("dd MMM yyyy")
+                        </span>
+                    </div>
+                    <div class="d-flex gap-1 flex-shrink-0">
+                        <a href="/edit-post/@art.ID_Articolo"
+                           class="btn btn-sm btn-outline-primary"
+                           style="border-radius:0.5em; font-size:0.78em; padding:0.3em 0.65em;"
+                           aria-label="Modifica @art.Titolo">
+                            <RadzenIcon Icon="edit" Style="font-size:0.9em;" />
+                        </a>
+                        <button class="btn btn-sm btn-outline-danger"
+                                style="border-radius:0.5em; font-size:0.78em; padding:0.3em 0.65em;"
+                                @onclick="() => HandleDelete(art.ID_Articolo)"
+                                disabled="@IsActionLoading"
+                                aria-label="Elimina @art.Titolo">
+                            <RadzenIcon Icon="delete" Style="font-size:0.9em;" />
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <RadzenButton Icon="add" 
+                      Text="Nuovo Post" 
+                      ButtonStyle="ButtonStyle.Primary" 
+                      Size="ButtonSize.Small" 
+                      Style="background-color:#4f46e5; border-radius:0.6rem; font-size:0.82rem;" 
+                      Click='() => NavigationManager.NavigateTo("/create-post?returnUrl=/profile")' />
+    }
+</div>
+
+<style>
+    .profile-post-link:hover {
+        color: #4f46e5 !important;
+    }
+</style>
+
+@code {
+    [Parameter, EditorRequired]
+    public ICollection<Articolo> Posts { get; set; } = new List<Articolo>();
+
+    [Parameter]
+    public bool IsActionLoading { get; set; } = false;
+
+    [Parameter]
+    public EventCallback<int> OnDeletePost { get; set; }
+
+    private async Task HandleDelete(int articoloId)
+    {
+        if (OnDeletePost.HasDelegate)
+        {
+            await OnDeletePost.InvokeAsync(articoloId);
+        }
+    }
+}

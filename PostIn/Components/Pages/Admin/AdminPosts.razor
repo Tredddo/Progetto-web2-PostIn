@@ -1,0 +1,447 @@
+@page "/admin/posts"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Authorization
+@using PostIn.Data
+@using PostIn.Data.Entities
+@using Radzen
+@using Radzen.Blazor
+
+@inject ApplicationDbContext DbContext
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+
+<PageTitle>Gestione Articoli - Admin PostIn</PageTitle>
+
+<RadzenNotification />
+
+<div class="mx-auto" style="max-width: 72em;">
+
+    <!-- INTESTAZIONE ADMIN -->
+    <header class="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom flex-wrap gap-2">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge bg-danger px-2.5 py-1 text-uppercase fw-bold" style="font-size: 0.7rem; border-radius: 0.35rem; letter-spacing: 0.05em;">
+                    Admin
+                </span>
+                <h1 class="h3 fw-bold text-dark mb-0">Gestione Articoli</h1>
+            </div>
+            <p class="text-muted small mb-0">Supervisione, analisi statistiche e moderazione di tutte le pubblicazioni aziendali</p>
+        </div>
+
+        <span class="count-badge-header">
+            <strong>@articoli.Count</strong> @(articoli.Count == 1 ? "articolo totale" : "articoli totali")
+        </span>
+    </header>
+
+    <!-- NAVIGAZIONE ADMIN -->
+    <div class="d-flex gap-2 mb-4 flex-wrap">
+        <a href="/admin/users" class="btn btn-sm px-3 py-1.5 fw-medium admin-nav-btn admin-nav-inactive">
+            <RadzenIcon Icon="group" Style="font-size: 0.95em;" class="me-1" /> Utenti
+        </a>
+        <a href="/admin/categories" class="btn btn-sm px-3 py-1.5 fw-medium admin-nav-btn admin-nav-inactive">
+            <RadzenIcon Icon="label" Style="font-size: 0.95em;" class="me-1" /> Categorie
+        </a>
+        <a href="/admin/posts" class="btn btn-sm px-3 py-1.5 fw-medium admin-nav-btn admin-nav-active">
+            <RadzenIcon Icon="article" Style="font-size: 0.95em;" class="me-1" /> Articoli
+        </a>
+    </div>
+
+    <!-- PANNELLO FILTRI DI RICERCA -->
+    <RadzenCard class="rz-shadow-sm p-3 mb-4" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+        <div class="row g-3 align-items-end">
+            
+            <!-- Ricerca Testuale -->
+            <div class="col-lg-4 col-md-6">
+                <label class="form-label fw-bold small text-muted text-uppercase mb-1" style="font-size: 0.73rem; letter-spacing: 0.05em;">
+                    Cerca Titolo o Autore
+                </label>
+                <div class="input-group" style="border-radius: 0.55rem; overflow: hidden;">
+                    <span class="input-group-text bg-light text-muted border-end-0">
+                        <RadzenIcon Icon="search" Style="font-size: 1.1em;" />
+                    </span>
+                    <input type="text"
+                           class="form-control border-start-0 modern-input"
+                           placeholder="es. Titolo post o username..."
+                           @bind="filtroTesto"
+                           @bind:event="oninput" />
+                </div>
+            </div>
+
+            <!-- Filtro Categoria -->
+            <div class="col-lg-3 col-md-6">
+                <label class="form-label fw-bold small text-muted text-uppercase mb-1" style="font-size: 0.73rem; letter-spacing: 0.05em;">
+                    Categoria
+                </label>
+                <select class="form-select modern-input" @bind="filtroCategoria" style="border-radius: 0.55rem;">
+                    <option value="">Tutte le categorie</option>
+                    @foreach (var cat in tutteCategorie)
+                    {
+                        <option value="@cat.ID_Categoria">#@cat.NomeCategoria</option>
+                    }
+                </select>
+            </div>
+
+            <!-- Filtro Data Inizio -->
+            <div class="col-lg-2 col-md-4">
+                <label class="form-label fw-bold small text-muted text-uppercase mb-1" style="font-size: 0.73rem; letter-spacing: 0.05em;">
+                    Dal
+                </label>
+                <input type="date" class="form-control modern-input" @bind="filtroDataDa" style="border-radius: 0.55rem;" />
+            </div>
+
+            <!-- Filtro Data Fine -->
+            <div class="col-lg-2 col-md-4">
+                <label class="form-label fw-bold small text-muted text-uppercase mb-1" style="font-size: 0.73rem; letter-spacing: 0.05em;">
+                    Al
+                </label>
+                <input type="date" class="form-control modern-input" @bind="filtroDataA" style="border-radius: 0.55rem;" />
+            </div>
+
+            <!-- Reset Filtri -->
+            <div class="col-lg-1 col-md-4 text-end">
+                <RadzenButton Icon="filter_alt_off"
+                              Variant="Variant.Outlined"
+                              ButtonStyle="ButtonStyle.Secondary"
+                              Size="ButtonSize.Medium"
+                              Style="border-radius: 0.55rem; width: 100%;"
+                              Title="Azzera filtri"
+                              Click="ResetFiltri" />
+            </div>
+        </div>
+    </RadzenCard>
+
+    <!-- TABELLA ARTICOLI -->
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
+            <p class="text-muted small mt-2">Caricamento archivio articoli...</p>
+        </div>
+    }
+    else
+    {
+        var filtrati = articoli
+            .Where(a =>
+                (string.IsNullOrWhiteSpace(filtroTesto) ||
+                 a.Titolo.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase) ||
+                 $"{a.Autore.Nome} {a.Autore.Cognome}".Contains(filtroTesto, StringComparison.OrdinalIgnoreCase) ||
+                 a.Autore.Username.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase)) &&
+                (!filtroCategoriaId.HasValue || a.ArticoloCategorie.Any(ac => ac.FK_Categoria == filtroCategoriaId.Value)) &&
+                (!filtroDataDa.HasValue || a.DataOraCreazione.Date >= filtroDataDa.Value) &&
+                (!filtroDataA.HasValue || a.DataOraCreazione.Date <= filtroDataA.Value))
+            .ToList();
+
+        <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+            <span class="text-muted small">
+                Visualizzati <strong>@filtrati.Count</strong> di <strong>@articoli.Count</strong> articoli
+            </span>
+        </div>
+
+        <RadzenCard class="rz-shadow-sm p-0 mb-5 overflow-hidden" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="px-4 py-3 fw-semibold text-muted small" style="font-size: 0.75rem;">ARTICOLO</th>
+                            <th class="py-3 fw-semibold text-muted small" style="font-size: 0.75rem;">AUTORE</th>
+                            <th class="py-3 fw-semibold text-muted small" style="font-size: 0.75rem;">CATEGORIE</th>
+                            <th class="py-3 fw-semibold text-muted small" style="font-size: 0.75rem;">DATA PUBBLICAZIONE</th>
+                            <th class="py-3 fw-semibold text-muted small" style="font-size: 0.75rem;">INTERAZIONI</th>
+                            <th class="py-3 fw-semibold text-muted small text-end pe-4" style="font-size: 0.75rem;">AZIONI</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!filtrati.Any())
+                        {
+                            <tr>
+                                <td colspan="6" class="text-center py-5 text-muted">
+                                    <RadzenIcon Icon="search_off" Style="font-size: 2.2em; color: #cbd5e1;" class="d-block mx-auto mb-2" />
+                                    <span class="small">Nessun articolo corrisponde ai filtri impostati.</span>
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var art in filtrati)
+                            {
+                                <tr>
+                                    <!-- Dettagli Articolo (Miniatura + Testi allineati) -->
+                                    <td class="px-4 py-3" style="min-width: 18em; max-width: 24em;">
+                                        <div class="d-flex align-items-center gap-3">
+                                            
+                                            <!-- Thumbnail / Icona Segnaposto -->
+                                            @if (!string.IsNullOrWhiteSpace(art.ImmagineCopertina))
+                                            {
+                                                <img src="@art.ImmagineCopertina" 
+                                                    alt="" 
+                                                    class="flex-shrink-0 border shadow-xs" 
+                                                    style="width: 3.2em; height: 2.6em; object-fit: cover; border-radius: 0.5rem; border-color: #e2e8f0 !important;" 
+                                                    onerror="this.onerror=null; this.src=''; this.classList.add('d-none'); this.nextElementSibling.classList.remove('d-none');" />
+                                                
+                                                <!-- Fallback se il link immagine è rotto -->
+                                                <div class="d-none align-items-center justify-content-center bg-light border flex-shrink-0 text-muted" 
+                                                    style="width: 3.2em; height: 2.6em; border-radius: 0.5rem;">
+                                                    <RadzenIcon Icon="article" Style="font-size: 1.3em; color: #94a3b8;" />
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="d-flex align-items-center justify-content-center bg-light border flex-shrink-0 text-muted" 
+                                                    style="width: 3.2em; height: 2.6em; border-radius: 0.5rem; border-color: #e2e8f0 !important;">
+                                                    <RadzenIcon Icon="article" Style="font-size: 1.3em; color: #94a3b8;" />
+                                                </div>
+                                            }
+
+                                            <!-- Titolo & ID -->
+                                            <div class="d-flex flex-column justify-content-center min-w-0">
+                                                <a href="/post/@art.ID_Articolo"
+                                                class="fw-bold text-dark text-decoration-none admin-post-link text-truncate"
+                                                style="font-size: 0.88rem; line-height: 1.25; margin-bottom: 2px;"
+                                                title="@art.Titolo">
+                                                    @art.Titolo
+                                                </a>
+                                                <span class="text-muted" style="font-size: 0.72rem; line-height: 1;">
+                                                    ID: <strong class="text-secondary fw-semibold">#@art.ID_Articolo</strong>
+                                                </span>
+                                            </div>
+
+                                        </div>
+                                    </td>
+
+                                    <!-- Autore -->
+                                    <td style="min-width: 12em;">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <RadzenGravatar Email="@art.Autore?.Username" Style="width: 2.2em; height: 2.2em; border-radius: 0.45rem; flex-shrink: 0;" />
+                                            <div class="min-w-0">
+                                                <span class="fw-semibold small d-block text-dark text-truncate">@art.Autore?.Nome @art.Autore?.Cognome</span>
+                                                <span class="text-muted d-block" style="font-size: 0.72rem;">@@@art.Autore?.Username</span>
+                                            </div>
+                                        </div>
+                                    </td>
+
+                                    <!-- Categorie -->
+                                    <td style="min-width: 10em;">
+                                        <div class="d-flex flex-wrap gap-1">
+                                            @foreach (var ac in art.ArticoloCategorie.Take(2))
+                                            {
+                                                <span class="category-badge">
+                                                    #@ac.Categoria?.NomeCategoria
+                                                </span>
+                                            }
+                                            @if (art.ArticoloCategorie.Count > 2)
+                                            {
+                                                <span class="badge bg-light text-muted border" style="font-size: 0.68rem; border-radius: 0.35rem;">
+                                                    +@(art.ArticoloCategorie.Count - 2)
+                                                </span>
+                                            }
+                                        </div>
+                                    </td>
+
+                                    <!-- Data -->
+                                    <td class="text-muted small" style="min-width: 8em; font-size: 0.8rem;">
+                                        @art.DataOraCreazione.ToLocalTime().ToString("dd MMM yyyy")
+                                    </td>
+
+                                    <!-- Statistiche di Engagement -->
+                                    <td style="min-width: 10em;">
+                                        <div class="d-flex align-items-center gap-2 text-muted small">
+                                            <span class="d-inline-flex align-items-center gap-1" title="Visualizzazioni">
+                                                <RadzenIcon Icon="visibility" Style="font-size: 0.95em; color: #64748b;" /> @art.Visualizzazioni.Count
+                                            </span>
+                                            <span class="d-inline-flex align-items-center gap-1" title="Mi Piace">
+                                                <RadzenIcon Icon="favorite" Style="font-size: 0.95em; color: #ef4444;" /> @art.Likes.Count
+                                            </span>
+                                            <span class="d-inline-flex align-items-center gap-1" title="Commenti">
+                                                <RadzenIcon Icon="chat_bubble" Style="font-size: 0.95em; color: #6366f1;" /> @art.Commenti.Count
+                                            </span>
+                                        </div>
+                                    </td>
+
+                                    <!-- Azioni -->
+                                    <td class="text-end pe-4" style="min-width: 7em;">
+                                        <div class="d-flex justify-content-end gap-1.5">
+                                            <RadzenButton Icon="visibility"
+                                                          Variant="Variant.Outlined"
+                                                          ButtonStyle="ButtonStyle.Secondary"
+                                                          Size="ButtonSize.Small"
+                                                          Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
+                                                          Title="Visualizza Articolo"
+                                                          Click='() => NavigationManager.NavigateTo($"/post/{art.ID_Articolo}")' />
+
+                                            <RadzenButton Icon="delete"
+                                                          Variant="Variant.Outlined"
+                                                          ButtonStyle="ButtonStyle.Danger"
+                                                          Size="ButtonSize.Small"
+                                                          Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
+                                                          Title="Elimina Articolo"
+                                                          IsBusy="@isActionLoading"
+                                                          Click="() => EliminaArticolo(art.ID_Articolo, art.Titolo)" />
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </RadzenCard>
+    }
+</div>
+
+<style>
+    .count-badge-header {
+        background-color: #f8fafc;
+        color: #475569;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.55rem;
+        padding: 0.35rem 0.75rem;
+        font-size: 0.8rem;
+    }
+
+    .admin-nav-btn {
+        border-radius: 0.55rem !important;
+        transition: all 0.15s ease;
+    }
+    .admin-nav-active {
+        background-color: #4f46e5 !important;
+        color: #ffffff !important;
+        border: 1px solid #4f46e5 !important;
+        box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+    }
+    .admin-nav-inactive {
+        background-color: #ffffff !important;
+        color: #475569 !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+    .admin-nav-inactive:hover {
+        background-color: #f1f5f9 !important;
+        color: #1e293b !important;
+    }
+
+    .category-badge {
+        background-color: #f1f5f9;
+        color: #4338ca;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.35rem;
+        padding: 0.15rem 0.45rem;
+        font-size: 0.72rem;
+        font-weight: 500;
+    }
+
+    .modern-input:focus {
+        background-color: #ffffff !important;
+        box-shadow: none !important;
+        border-color: #818cf8 !important;
+    }
+
+    .admin-post-link:hover {
+        color: #4f46e5 !important;
+    }
+</style>
+
+@code {
+    private bool isLoading = true;
+    private bool isActionLoading = false;
+
+    private List<Articolo> articoli = new();
+    private List<Categoria> tutteCategorie = new();
+
+    // Proprietà di Filtro
+    private string filtroTesto = string.Empty;
+    private string filtroCategoria = string.Empty;
+    private int? filtroCategoriaId => int.TryParse(filtroCategoria, out int id) ? id : null;
+    private DateTime? filtroDataDa;
+    private DateTime? filtroDataA;
+
+    protected override async Task OnInitializedAsync()
+    {
+        tutteCategorie = await DbContext.Categorie
+            .AsNoTracking()
+            .OrderBy(c => c.NomeCategoria)
+            .ToListAsync();
+
+        await CaricaArticoli();
+    }
+
+    private async Task CaricaArticoli()
+    {
+        isLoading = true;
+        try
+        {
+            articoli = await DbContext.Articoli
+                .AsNoTracking()
+                .Include(a => a.Autore)
+                .Include(a => a.ArticoloCategorie)
+                    .ThenInclude(ac => ac.Categoria)
+                .Include(a => a.Visualizzazioni)
+                .Include(a => a.Likes)
+                .Include(a => a.Commenti)
+                .OrderByDescending(a => a.DataOraCreazione)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore Caricamento",
+                Detail = ex.Message,
+                Duration = 3500
+            });
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ResetFiltri()
+    {
+        filtroTesto = string.Empty;
+        filtroCategoria = string.Empty;
+        filtroDataDa = null;
+        filtroDataA = null;
+    }
+
+    private async Task EliminaArticolo(int articoloId, string titoloArticolo)
+    {
+        if (isActionLoading) return;
+        isActionLoading = true;
+
+        try
+        {
+            var art = await DbContext.Articoli.FindAsync(articoloId);
+            if (art != null)
+            {
+                DbContext.Articoli.Remove(art);
+                await DbContext.SaveChangesAsync();
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Info,
+                    Summary = "Articolo Eliminato",
+                    Detail = $"L'articolo '{titoloArticolo}' è stato rimosso dalla piattaforma.",
+                    Duration = 2500
+                });
+
+                await CaricaArticoli();
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore Eliminazione",
+                Detail = ex.Message,
+                Duration = 3500
+            });
+        }
+        finally
+        {
+            isActionLoading = false;
+        }
+    }
+}

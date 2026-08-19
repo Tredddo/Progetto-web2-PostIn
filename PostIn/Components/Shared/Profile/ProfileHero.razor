@@ -1,0 +1,154 @@
+@using PostIn.Data.Entities
+@using Radzen
+@using Radzen.Blazor
+@inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+
+<div class="card border-0 shadow-sm mb-4 hero-card overflow-hidden">
+    <div class="p-4 p-md-5 d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-4">
+        
+        <!-- Blocco Sinistro: Avatar e Info Utente -->
+        <div class="d-flex align-items-center gap-3 gap-md-4">
+            <!-- Avatar -->
+            <RadzenGravatar Email="@Dipendente.Username" 
+                            Style="width: 4.75rem; height: 4.75rem; border-radius: 50%; border: 3px solid #ffffff;" 
+                            class="shadow-sm flex-shrink-0" />
+            
+            <!-- Dettagli anagrafici -->
+            <div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <h1 class="h4 fw-bold text-dark mb-0">@Dipendente.Nome @Dipendente.Cognome</h1>
+                    
+                    <!-- Badge Ruolo -->
+                    <span class="badge @(Dipendente.Ruolo == 1 ? "bg-danger" : "bg-primary") rounded-pill px-2.5 py-1"
+                          style="font-size: 0.72rem; letter-spacing: 0.02em;">
+                        <RadzenIcon Icon="@(Dipendente.Ruolo == 1 ? "admin_panel_settings" : "person")" 
+                                    Style="font-size: 0.85rem; vertical-align: -0.1em; margin-right: 0.2rem;" />
+                        @(Dipendente.Ruolo == 1 ? "Amministratore" : "Dipendente")
+                    </span>
+                </div>
+
+                <p class="text-muted small mb-2 mt-1">@@@Dipendente.Username</p>
+
+                <!-- Badge stato account -->
+                <div class="d-inline-flex align-items-center gap-1.5 px-2 py-0.5 rounded-pill bg-white border small text-secondary" style="font-size: 0.75rem;">
+                    <span class="status-indicator bg-success"></span>
+                    <span>Account Attivo</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Blocco Destro: Statistiche e Azione Rapida -->
+        <div class="d-flex flex-column align-items-md-end gap-3">
+            
+            <!-- Box Statistiche -->
+            <div class="d-flex gap-2 gap-sm-3">
+                <a href="/my-posts" class="stat-box text-decoration-none text-center p-2.5 px-3 rounded-3 bg-white border" title="Visualizza i tuoi post">
+                    <span class="fw-bold fs-5 text-dark d-block leading-tight">@NumeroArticoli</span>
+                    <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.68rem; letter-spacing: 0.05em;">Post</span>
+                </a>
+
+                <a href="/following" class="stat-box text-decoration-none text-center p-2.5 px-3 rounded-3 bg-white border" title="Visualizza gli utenti che segui">
+                    <span class="fw-bold fs-5 text-dark d-block leading-tight">@FollowingCount</span>
+                    <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.68rem; letter-spacing: 0.05em;">Seguiti</span>
+                </a>
+
+                <a href="/followers" class="stat-box text-decoration-none text-center p-2.5 px-3 rounded-3 bg-white border" title="Visualizza i tuoi follower">
+                    <span class="fw-bold fs-5 text-dark d-block leading-tight">@FollowersCount</span>
+                    <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.68rem; letter-spacing: 0.05em;">Follower</span>
+                </a>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<style>
+    .hero-card {
+        border-radius: 1.25rem;
+        background: linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%);
+        border: 1px solid rgba(226, 232, 240, 0.8) !important;
+    }
+
+    .profile-avatar {
+        width: 4.75rem;
+        height: 4.75rem;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        border: 3px solid #ffffff;
+        color: #ffffff;
+    }
+
+    .avatar-initials {
+        font-size: 1.6rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        user-select: none;
+    }
+
+    .status-indicator {
+        width: 0.45rem;
+        height: 0.45rem;
+        border-radius: 50%;
+        display: inline-block;
+    }
+
+    .stat-box {
+        min-width: 4.8rem;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .stat-box:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.06);
+    }
+
+    .quick-action-btn {
+        background-color: #4f46e5;
+        border-color: #4f46e5;
+        border-radius: 0.6rem;
+        padding: 0.4rem 0.9rem;
+        font-size: 0.82rem;
+        transition: all 0.15s ease-in-out;
+    }
+
+    .quick-action-btn:hover {
+        background-color: #4338ca;
+        border-color: #4338ca;
+    }
+
+    .leading-tight {
+        line-height: 1.2;
+    }
+</style>
+
+@code {
+    [Parameter, EditorRequired]
+    public Dipendente Dipendente { get; set; } = null!;
+
+    [Parameter]
+    public int FollowingCount { get; set; } = 0;
+
+    [Parameter]
+    public int FollowersCount { get; set; } = 0;
+
+    // Calcola le iniziali del nome e cognome o fallback sulla prima lettera dell'username
+    private string Iniziali
+    {
+        get
+        {
+            if (Dipendente == null) return "U";
+            
+            var primaLetteraNome = !string.IsNullOrWhiteSpace(Dipendente.Nome) ? Dipendente.Nome.Trim()[0].ToString() : "";
+            var primaLetteraCognome = !string.IsNullOrWhiteSpace(Dipendente.Cognome) ? Dipendente.Cognome.Trim()[0].ToString() : "";
+            var sigla = $"{primaLetteraNome}{primaLetteraCognome}";
+
+            return string.IsNullOrEmpty(sigla) 
+                ? (!string.IsNullOrWhiteSpace(Dipendente.Username) ? Dipendente.Username[0].ToString().ToUpper() : "U") 
+                : sigla.ToUpper();
+        }
+    }
+
+    // Evita NullReferenceException se la collection Articoliscritti non è stata caricata con Include
+    private int NumeroArticoli => Dipendente?.Articoliscritti?.Count ?? 0;
+}

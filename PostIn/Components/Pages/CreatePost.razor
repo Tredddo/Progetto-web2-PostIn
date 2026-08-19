@@ -1,0 +1,452 @@
+@page "/create-post"
+@page "/edit-post/{Id:int}"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Hosting
+@using PostIn.Data
+@using PostIn.Data.Entities
+@using PostIn.Components.Shared.CreatePost
+@using PostIn.Components.Shared.Profile
+@using Radzen
+@using Radzen.Blazor
+@inject ApplicationDbContext DbContext
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+@inject IWebHostEnvironment Environment
+
+<PageTitle>@(isEditMode ? "Modifica Post" : "Nuovo Post") - PostIn</PageTitle>
+
+<div class="mx-auto" style="max-width: 58em;">
+
+    <!-- HEADER DI NAVIGAZIONE -->
+    <header class="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom">
+        <div class="d-flex align-items-center gap-3">
+            <RadzenButton Icon="arrow_back" 
+                          Variant="Variant.Text" 
+                          ButtonStyle="ButtonStyle.Base" 
+                          Size="ButtonSize.Medium" 
+                          Click="TornaIndietro" 
+                          aria-label="Torna indietro" />
+            <div>
+                <div class="d-flex align-items-center gap-2">
+                    <h1 class="h3 fw-bold text-dark mb-0">@(isEditMode ? "Modifica Post" : "Nuovo Post")</h1>
+                    <span class="badge @(isEditMode ? "bg-warning text-dark" : "bg-primary") rounded-pill px-2.5 py-1" style="font-size:0.72rem;">
+                        @(isEditMode ? "Modifica in corso" : "Nuova pubblicazione")
+                    </span>
+                </div>
+                <p class="text-muted small mb-0 mt-0.5">
+                    @(isEditMode ? "Applica le modifiche e aggiorna il contenuto per i tuoi colleghi." : "Condividi idee, guide o aggiornamenti aziendali con il team.")
+                </p>
+            </div>
+        </div>
+
+        <!-- Selettore Modalità: Editor vs Anteprima -->
+        <div class="btn-group p-1 bg-light border rounded-pill d-none d-sm-inline-flex" role="group">
+            <button type="button" 
+                    class="btn btn-sm rounded-pill px-3 py-1 fw-medium @(!showPreview ? "btn-white shadow-sm text-primary" : "btn-light text-muted border-0")" 
+                    @onclick="() => showPreview = false">
+                <RadzenIcon Icon="edit" Style="font-size: 0.9em; vertical-align: -0.1em;" class="me-1" />
+                Editor
+            </button>
+            <button type="button" 
+                    class="btn btn-sm rounded-pill px-3 py-1 fw-medium @(showPreview ? "btn-white shadow-sm text-primary" : "btn-light text-muted border-0")" 
+                    @onclick="() => showPreview = true">
+                <RadzenIcon Icon="visibility" Style="font-size: 0.9em; vertical-align: -0.1em;" class="me-1" />
+                Anteprima
+            </button>
+        </div>
+    </header>
+
+    @if (isPageLoading)
+    {
+        <div class="text-center py-5">
+            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
+            <p class="text-muted small mt-2">Caricamento in corso...</p>
+        </div>
+    }
+    else
+    {
+        <EditForm Model="formModel" OnValidSubmit="SalvaArticolo">
+            <DataAnnotationsValidator />
+
+            <div class="row g-4">
+                
+                <!-- COLONNA PRINCIPALE -->
+                <div class="col-lg-8">
+                    @if (showPreview)
+                    {
+                        <PostPreviewCard Titolo="@formModel.Titolo"
+                                         CorpoTesto="@formModel.CorpoTesto"
+                                         ImmagineCopertina="@previewImageUrl"
+                                         Categorie="@categorie"
+                                         CategorieSelezionate="@categorieSelezionate"
+                                         OnImageError="() => previewImageUrl = null" />
+                    }
+                    else
+                    {
+                        <!-- 1. Titolo -->
+                        <div class="card border-0 shadow-sm p-4 mb-3" style="border-radius: 1.1rem;">
+                            <label for="titolo" class="form-label fw-bold text-dark mb-1">
+                                Titolo dell Post <span class="text-danger">*</span>
+                            </label>
+                            <p class="text-muted small mb-2">Scegli un titolo chiaro e accattivante per i tuoi colleghi.</p>
+                            
+                            <InputText id="titolo"
+                                       @bind-Value="formModel.Titolo"
+                                       class="form-control form-control-lg border-light-subtle shadow-none modern-input"
+                                       placeholder="es. Nuove linee guida sullo Smart Working 2026..."
+                                       maxlength="200" />
+                            
+                            <div class="d-flex justify-content-between align-items-center mt-1">
+                                <ValidationMessage For="() => formModel.Titolo" class="text-danger small mb-0" />
+                                <span class="text-muted small ms-auto">@(formModel.Titolo?.Length ?? 0)/200</span>
+                            </div>
+                        </div>
+
+                        <!-- 2. Upload Immagine in Memoria -->
+                        <CoverImageUploader PreviewUrl="@previewImageUrl" 
+                                            OnImageChanged="HandleImageChanged" />
+
+                        <!-- 3. Contenuto / Testo -->
+                        <div class="card border-0 shadow-sm p-4 mb-3" style="border-radius: 1.1rem;">
+                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                <label for="corpo" class="form-label fw-bold text-dark mb-0">
+                                    Contenuto dell Post <span class="text-danger">*</span>
+                                </label>
+                            </div>
+
+                            <InputTextArea id="corpo"
+                                           @bind-Value="formModel.CorpoTesto"
+                                           class="form-control modern-input"
+                                           rows="12"
+                                           placeholder="Condividi le tue riflessioni, una soluzione tecnica o una comunicazione..."
+                                           style="resize: vertical; line-height: 1.7; font-size: 0.98rem;" />
+
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <ValidationMessage For="() => formModel.CorpoTesto" class="text-danger small mb-0" />
+                                <div class="text-muted small ms-auto d-flex gap-3">
+                                    <span><strong>@(formModel.CorpoTesto?.Length ?? 0)</strong> caratteri</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- SIDEBAR DESTRA -->
+                <div class="col-lg-4">
+                    <!-- Selettore Categorie -->
+                    <div class="mb-3">
+                        <CategorySelector Categories="categorie"
+                                          SelectedCategoryIds="categorieSelezionate"
+                                          IsDisabled="isSaving"
+                                          OnToggle="ToggleCategoria" />
+                    </div>
+
+                    <!-- Azioni di Pubblicazione -->
+                    <PostPublishCard IsEditMode="isEditMode"
+                                     IsSaving="isSaving"
+                                     OnCancel="TornaIndietro" />
+                </div>
+
+            </div>
+        </EditForm>
+    }
+</div>
+
+<style>
+    .btn-white {
+        background-color: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+
+    .modern-input {
+        border-radius: 0.75rem !important;
+        border-color: #e2e8f0 !important;
+        padding: 0.65rem 0.9rem;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .modern-input:focus {
+        border-color: #818cf8 !important;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12) !important;
+    }
+</style>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    [SupplyParameterFromQuery] 
+    public string? ReturnUrl { get; set; }
+
+    private string DestinazioneRitorno => !string.IsNullOrWhiteSpace(ReturnUrl) ? ReturnUrl : "/";
+    private bool isEditMode => Id.HasValue && Id.Value > 0;
+    private bool isPageLoading = true;
+    private bool isSaving = false;
+    private bool showPreview = false;
+
+    private ArticoloFormModel formModel = new();
+    private List<Categoria> categorie = new();
+    private HashSet<int> categorieSelezionate = new();
+    private int currentUserId = 0;
+
+    // Gestione Immagine In-Memory (nessun salvataggio fino al submit)
+    private string? previewImageUrl;
+    private CoverImageUploader.ImageData? pendingImage;
+    private bool isImageExplicitlyRemoved = false;
+    private string? originalImagePath;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userIdClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        int.TryParse(userIdClaim, out currentUserId);
+
+        categorie = await DbContext.Categorie.AsNoTracking().OrderBy(c => c.NomeCategoria).ToListAsync();
+
+        if (isEditMode)
+        {
+            var articolo = await DbContext.Articoli
+                .Include(a => a.ArticoloCategorie)
+                .FirstOrDefaultAsync(a => a.ID_Articolo == Id!.Value);
+
+            if (articolo != null)
+            {
+                var ruoloClaim = authState.User.FindFirst(ClaimTypes.Role)?.Value;
+                if (articolo.FK_Autore != currentUserId && ruoloClaim != "Admin" && ruoloClaim != "Amministratore")
+                {
+                    NavigationManager.NavigateTo(DestinazioneRitorno);
+                    return;
+                }
+
+                formModel.Titolo = articolo.Titolo;
+                formModel.CorpoTesto = articolo.CorpoTesto;
+                originalImagePath = articolo.ImmagineCopertina;
+                previewImageUrl = articolo.ImmagineCopertina;
+                categorieSelezionate = articolo.ArticoloCategorie.Select(ac => ac.FK_Categoria).ToHashSet();
+            }
+            else
+            {
+                NavigationManager.NavigateTo(DestinazioneRitorno);
+                return;
+            }
+        }
+
+        isPageLoading = false;
+    }
+
+    private void HandleImageChanged(CoverImageUploader.ImageData? data)
+    {
+        if (data != null)
+        {
+            pendingImage = data;
+            previewImageUrl = data.PreviewUrl;
+            isImageExplicitlyRemoved = false;
+        }
+        else
+        {
+            pendingImage = null;
+            previewImageUrl = null;
+            isImageExplicitlyRemoved = true;
+        }
+    }
+
+    private void TornaIndietro()
+    {
+        NavigationManager.NavigateTo(DestinazioneRitorno);
+    }
+
+    private void ToggleCategoria(int categoriaId)
+    {
+        var nuovoSet = new HashSet<int>(categorieSelezionate);
+        if (nuovoSet.Contains(categoriaId))
+            nuovoSet.Remove(categoriaId);
+        else
+            nuovoSet.Add(categoriaId);
+
+        categorieSelezionate = nuovoSet;
+    }
+
+    private async Task SalvaArticolo()
+    {
+        if (currentUserId <= 0)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Sessione Scaduta",
+                Detail = "Effettua nuovamente il login.",
+                Duration = 3500
+            });
+            return;
+        }
+
+        isSaving = true;
+
+        try
+        {
+            string? finalImagePath = isEditMode ? originalImagePath : null;
+
+            // Salvataggio differito nella cartella protetta Uploads/Covers
+            if (pendingImage != null)
+            {
+                var uploadsFolder = Path.Combine(Environment.ContentRootPath, "Uploads", "Covers");
+                if (!Directory.Exists(uploadsFolder))
+                {
+                    Directory.CreateDirectory(uploadsFolder);
+                }
+
+                var trustedFileName = $"{Guid.NewGuid():N}{pendingImage.Extension}";
+                var physicalFilePath = Path.Combine(uploadsFolder, trustedFileName);
+
+                await File.WriteAllBytesAsync(physicalFilePath, pendingImage.Bytes);
+
+                if (isEditMode && !string.IsNullOrWhiteSpace(originalImagePath))
+                {
+                    EliminaFileFisico(originalImagePath);
+                }
+
+                finalImagePath = $"/uploads/covers/{trustedFileName}";
+            }
+            else if (isImageExplicitlyRemoved)
+            {
+                if (isEditMode && !string.IsNullOrWhiteSpace(originalImagePath))
+                {
+                    EliminaFileFisico(originalImagePath);
+                }
+                finalImagePath = null;
+            }
+
+            // Salvataggio a Database
+            if (isEditMode)
+            {
+                var articolo = await DbContext.Articoli
+                    .Include(a => a.ArticoloCategorie)
+                    .FirstOrDefaultAsync(a => a.ID_Articolo == Id!.Value);
+
+                if (articolo == null)
+                {
+                    NotificationService.Notify(new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Error,
+                        Summary = "Errore",
+                        Detail = "Articolo non trovato.",
+                        Duration = 3000
+                    });
+                    return;
+                }
+
+                articolo.Titolo = formModel.Titolo.Trim();
+                articolo.CorpoTesto = formModel.CorpoTesto.Trim();
+                articolo.ImmagineCopertina = finalImagePath;
+
+                DbContext.ArticoloCategorie.RemoveRange(articolo.ArticoloCategorie);
+                foreach (var catId in categorieSelezionate)
+                {
+                    DbContext.ArticoloCategorie.Add(new ArticoloCategoria 
+                    { 
+                        FK_Articolo = articolo.ID_Articolo, 
+                        FK_Categoria = catId 
+                    });
+                }
+
+                await DbContext.SaveChangesAsync();
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Modifiche Salvate",
+                    Detail = "Il post è stato aggiornato con successo!",
+                    Duration = 2500
+                });
+
+                await Task.Delay(350);
+                NavigationManager.NavigateTo($"/post/{Id!.Value}");
+            }
+            else
+            {
+                var nuovoArticolo = new Articolo
+                {
+                    Titolo = formModel.Titolo.Trim(),
+                    CorpoTesto = formModel.CorpoTesto.Trim(),
+                    ImmagineCopertina = finalImagePath,
+                    DataOraCreazione = DateTime.UtcNow,
+                    FK_Autore = currentUserId
+                };
+
+                DbContext.Articoli.Add(nuovoArticolo);
+                await DbContext.SaveChangesAsync();
+
+                foreach (var catId in categorieSelezionate)
+                {
+                    DbContext.ArticoloCategorie.Add(new ArticoloCategoria 
+                    { 
+                        FK_Articolo = nuovoArticolo.ID_Articolo, 
+                        FK_Categoria = catId 
+                    });
+                }
+                await DbContext.SaveChangesAsync();
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Pubblicato!",
+                    Detail = "Il tuo articolo è ora visibile a tutti i colleghi.",
+                    Duration = 2500
+                });
+
+                await Task.Delay(350);
+                NavigationManager.NavigateTo($"/post/{nuovoArticolo.ID_Articolo}");
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore durante il salvataggio",
+                Detail = ex.Message,
+                Duration = 3500
+            });
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void EliminaFileFisico(string? relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath)) return;
+
+        if (relativePath.StartsWith("/uploads/covers/"))
+        {
+            try
+            {
+                var fileName = Path.GetFileName(relativePath);
+                var fullPath = Path.Combine(Environment.ContentRootPath, "Uploads", "Covers", fileName);
+                if (File.Exists(fullPath))
+                {
+                    File.Delete(fullPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AVVISO PULIZIA FILE]: {ex.Message}");
+            }
+        }
+    }
+
+    public class ArticoloFormModel
+    {
+        [Required(ErrorMessage = "Il titolo è obbligatorio.")]
+        [StringLength(200, ErrorMessage = "Il titolo non può superare i 200 caratteri.")]
+        public string Titolo { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Il contenuto è obbligatorio.")]
+        [StringLength(50000, ErrorMessage = "Il contenuto è troppo lungo.")]
+        public string CorpoTesto { get; set; } = string.Empty;
+    }
+}

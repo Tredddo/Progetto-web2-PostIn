@@ -1,0 +1,443 @@
+@page "/admin/categories"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Authorization
+@using System.ComponentModel.DataAnnotations
+@using PostIn.Data
+@using PostIn.Data.Entities
+@using Radzen
+@using Radzen.Blazor
+
+@inject ApplicationDbContext DbContext
+@inject NotificationService NotificationService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Gestione Categorie - Admin PostIn</PageTitle>
+
+<RadzenNotification />
+
+<div class="mx-auto" style="max-width: 62em;">
+
+    <!-- INTESTAZIONE ADMIN -->
+    <header class="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom flex-wrap gap-2">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge bg-danger px-2.5 py-1 text-uppercase fw-bold" style="font-size: 0.7rem; border-radius: 0.35rem; letter-spacing: 0.05em;">
+                    Admin
+                </span>
+                <h1 class="h3 fw-bold text-dark mb-0">Gestione Categorie</h1>
+            </div>
+            <p class="text-muted small mb-0">Aggiungi, modifica o rimuovi gli hashtag tematici della piattaforma</p>
+        </div>
+
+        <span class="count-badge-header">
+            <strong>@categorie.Count</strong> @(categorie.Count == 1 ? "categoria attiva" : "categorie attive")
+        </span>
+    </header>
+
+    <!-- NAVIGAZIONE ADMIN -->
+    <div class="d-flex gap-2 mb-4 flex-wrap">
+        <a href="/admin/users" class="btn btn-sm px-3 py-1.5 fw-medium admin-nav-btn admin-nav-inactive">
+            <RadzenIcon Icon="group" Style="font-size: 0.95em;" class="me-1" /> Utenti
+        </a>
+        <a href="/admin/categories" class="btn btn-sm px-3 py-1.5 fw-medium admin-nav-btn admin-nav-active">
+            <RadzenIcon Icon="label" Style="font-size: 0.95em;" class="me-1" /> Categorie
+        </a>
+        <a href="/admin/posts" class="btn btn-sm px-3 py-1.5 fw-medium admin-nav-btn admin-nav-inactive">
+            <RadzenIcon Icon="article" Style="font-size: 0.95em;" class="me-1" /> Post
+        </a>
+    </div>
+
+    <div class="row g-4 mb-5">
+
+        <!-- FORM CREAZIONE / MODIFICA (Colonna Sinistra) -->
+        <div class="col-lg-4">
+            <RadzenCard class="rz-shadow-sm p-4 sticky-card" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h2 class="h5 fw-bold mb-0 d-flex align-items-center gap-2 text-dark">
+                        <RadzenIcon Icon="@(editingId.HasValue ? "edit_note" : "add_circle")" Style="font-size: 1.2em; color: #6366f1;" />
+                        @(editingId.HasValue ? "Modifica Categoria" : "Nuova Categoria")
+                    </h2>
+                </div>
+
+                <EditForm Model="formModel" OnValidSubmit="SalvaCategoria" FormName="adminCatForm">
+                    <DataAnnotationsValidator />
+
+                    <div class="mb-3">
+                        <label for="nomeCat" class="form-label fw-bold small text-muted text-uppercase" style="font-size: 0.75rem; letter-spacing: 0.05em;">
+                            Nome Hashtag <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group" style="border-radius: 0.55rem; overflow: hidden;">
+                            <span class="input-group-text bg-light text-muted border-end-0 fw-bold">#</span>
+                            <InputText id="nomeCat"
+                                       @bind-Value="formModel.NomeCategoria"
+                                       class="form-control border-start-0 modern-input"
+                                       placeholder="es. IT & Tech, HR, Novità..." />
+                        </div>
+                        <ValidationMessage For="() => formModel.NomeCategoria" class="text-danger small mt-1" />
+                    </div>
+
+                    <div class="d-flex flex-column gap-2 mt-4">
+                        <RadzenButton Icon="@(editingId.HasValue ? "save" : "add")"
+                                      Text="@(editingId.HasValue ? "Salva Modifiche" : "Aggiungi Categoria")"
+                                      ButtonStyle="ButtonStyle.Primary"
+                                      Size="ButtonSize.Medium"
+                                      ButtonType="ButtonType.Submit"
+                                      IsBusy="@isActionLoading"
+                                      Style="background-color: #4f46e5; border-radius: 0.55rem; font-weight: 600;" />
+
+                        @if (editingId.HasValue)
+                        {
+                            <RadzenButton Text="Annulla Modifica"
+                                          Variant="Variant.Outlined"
+                                          ButtonStyle="ButtonStyle.Secondary"
+                                          Size="ButtonSize.Small"
+                                          Style="border-radius: 0.55rem;"
+                                          Click="AnnullaModifica" />
+                        }
+                    </div>
+                </EditForm>
+            </RadzenCard>
+        </div>
+
+        <!-- TABELLA CATEGORIE ESISTENTI (Colonna Destra) -->
+        <div class="col-lg-8">
+            <RadzenCard class="rz-shadow-sm p-0 overflow-hidden" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+                
+                <div class="px-4 py-3 bg-light border-bottom d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.05em;">Categorie Registrate</span>
+                    <span class="badge bg-white text-secondary border px-2.5 py-1" style="border-radius: 0.4rem; font-size: 0.75rem;">
+                        Totale: @categorie.Count
+                    </span>
+                </div>
+
+                @if (isLoading)
+                {
+                    <div class="text-center py-5">
+                        <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
+                        <p class="text-muted small mt-2">Caricamento categorie...</p>
+                    </div>
+                }
+                else if (!categorie.Any())
+                {
+                    <div class="text-center py-5 text-muted">
+                        <RadzenIcon Icon="label_off" Style="font-size: 2.5em; color: #cbd5e1;" class="mb-2 d-block mx-auto" />
+                        <p class="mb-0 small fw-medium text-dark">Nessuna categoria presente.</p>
+                        <p class="small text-muted mb-0">Usa il modulo a sinistra per creare il primo hashtag.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="px-4 py-3 fw-semibold text-muted small" style="font-size: 0.75rem;">ID</th>
+                                    <th class="py-3 fw-semibold text-muted small" style="font-size: 0.75rem;">NOME CATEGORIA</th>
+                                    <th class="py-3 fw-semibold text-muted small" style="font-size: 0.75rem;">ARTICOLI COLLEGATI</th>
+                                    <th class="py-3 fw-semibold text-muted small text-end pe-4" style="font-size: 0.75rem;">AZIONI</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var cat in categorie)
+                                {
+                                    var isEditing = editingId == cat.ID_Categoria;
+                                    var articoliCount = cat.ArticoloCategorie?.Count ?? 0;
+
+                                    <tr class="@(isEditing ? "table-primary bg-opacity-25" : "")">
+                                        <td class="px-4 text-muted small fw-medium">#@cat.ID_Categoria</td>
+                                        <td>
+                                            <span class="category-badge">
+                                                #@cat.NomeCategoria
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="text-secondary small fw-medium">
+                                                @articoliCount @(articoliCount == 1 ? "articolo" : "articoli")
+                                            </span>
+                                        </td>
+                                        <td class="text-end pe-4">
+                                            <div class="d-flex justify-content-end gap-1.5">
+                                                
+                                                <!-- Modifica -->
+                                                <RadzenButton Icon="edit"
+                                                              Variant="Variant.Outlined"
+                                                              ButtonStyle="ButtonStyle.Primary"
+                                                              Size="ButtonSize.Small"
+                                                              Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
+                                                              Title="Modifica nome categoria"
+                                                              Click="() => ModificaCategoria(cat)" />
+
+                                                <!-- Elimina (Disabilitato se ci sono post associati) -->
+                                                <RadzenButton Icon="delete"
+                                                              Variant="Variant.Outlined"
+                                                              ButtonStyle="ButtonStyle.Danger"
+                                                              Size="ButtonSize.Small"
+                                                              Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
+                                                              Disabled="@(isActionLoading || articoliCount > 0)"
+                                                              Title="@(articoliCount > 0 ? "Impossibile eliminare: vi sono articoli collegati" : "Elimina categoria")"
+                                                              Click="() => EliminaCategoria(cat.ID_Categoria, cat.NomeCategoria)" />
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </RadzenCard>
+        </div>
+
+    </div>
+</div>
+
+<style>
+    .sticky-card {
+        position: sticky;
+        top: 5.5em;
+    }
+
+    .count-badge-header {
+        background-color: #f8fafc;
+        color: #475569;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.55rem;
+        padding: 0.35rem 0.75rem;
+        font-size: 0.8rem;
+    }
+
+    .admin-nav-btn {
+        border-radius: 0.55rem !important;
+        transition: all 0.15s ease;
+    }
+    .admin-nav-active {
+        background-color: #4f46e5 !important;
+        color: #ffffff !important;
+        border: 1px solid #4f46e5 !important;
+        box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+    }
+    .admin-nav-inactive {
+        background-color: #ffffff !important;
+        color: #475569 !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+    .admin-nav-inactive:hover {
+        background-color: #f1f5f9 !important;
+        color: #1e293b !important;
+    }
+
+    .category-badge {
+        background-color: #f1f5f9;
+        color: #4338ca;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.45rem;
+        padding: 0.2rem 0.6rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+    }
+
+    .modern-input:focus {
+        background-color: #ffffff !important;
+        box-shadow: none !important;
+        border-color: #818cf8 !important;
+    }
+</style>
+
+@code {
+    private bool isLoading = true;
+    private bool isActionLoading = false;
+    private int? editingId = null;
+    private List<Categoria> categorie = new();
+    private CategoriaFormModel formModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CaricaCategorie();
+    }
+
+    private async Task CaricaCategorie()
+    {
+        isLoading = true;
+        try
+        {
+            categorie = await DbContext.Categorie
+                .AsNoTracking()
+                .Include(c => c.ArticoloCategorie)
+                .OrderBy(c => c.NomeCategoria)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore di Caricamento",
+                Detail = ex.Message,
+                Duration = 3500
+            });
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ModificaCategoria(Categoria cat)
+    {
+        editingId = cat.ID_Categoria;
+        formModel.NomeCategoria = cat.NomeCategoria;
+    }
+
+    private void AnnullaModifica()
+    {
+        editingId = null;
+        formModel = new();
+    }
+
+    private async Task SalvaCategoria()
+    {
+        if (isActionLoading) return;
+        isActionLoading = true;
+
+        var nomeNormalizzato = formModel.NomeCategoria.Trim();
+
+        try
+        {
+            // Controllo duplicati case-insensitive
+            var duplicato = await DbContext.Categorie
+                .AnyAsync(c => c.NomeCategoria.ToLower() == nomeNormalizzato.ToLower() &&
+                               (!editingId.HasValue || c.ID_Categoria != editingId.Value));
+
+            if (duplicato)
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Warning,
+                    Summary = "Attenzione",
+                    Detail = $"La categoria '#{nomeNormalizzato}' esiste già.",
+                    Duration = 3000
+                });
+                return;
+            }
+
+            if (editingId.HasValue)
+            {
+                // Modifica
+                var cat = await DbContext.Categorie.FindAsync(editingId.Value);
+                if (cat != null)
+                {
+                    cat.NomeCategoria = nomeNormalizzato;
+                    await DbContext.SaveChangesAsync();
+
+                    NotificationService.Notify(new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Success,
+                        Summary = "Aggiornata",
+                        Detail = $"Categoria aggiornata in '#{cat.NomeCategoria}'.",
+                        Duration = 2500
+                    });
+
+                    AnnullaModifica();
+                }
+            }
+            else
+            {
+                // Creazione
+                var nuova = new Categoria { NomeCategoria = nomeNormalizzato };
+                DbContext.Categorie.Add(nuova);
+                await DbContext.SaveChangesAsync();
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Creata",
+                    Detail = $"Nuova categoria '#{nuova.NomeCategoria}' aggiunta con successo.",
+                    Duration = 2500
+                });
+
+                formModel = new();
+            }
+
+            await CaricaCategorie();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore",
+                Detail = ex.Message,
+                Duration = 3500
+            });
+        }
+        finally
+        {
+            isActionLoading = false;
+        }
+    }
+
+    private async Task EliminaCategoria(int categoriaId, string nomeCategoria)
+    {
+        if (isActionLoading) return;
+        isActionLoading = true;
+
+        try
+        {
+            var cat = await DbContext.Categorie
+                .Include(c => c.ArticoloCategorie)
+                .FirstOrDefaultAsync(c => c.ID_Categoria == categoriaId);
+
+            if (cat != null)
+            {
+                if (cat.ArticoloCategorie.Any())
+                {
+                    NotificationService.Notify(new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Error,
+                        Summary = "Impossibile Eliminare",
+                        Detail = "Questa categoria ha articoli associati. Riassegnali prima di rimuoverla.",
+                        Duration = 3500
+                    });
+                    return;
+                }
+
+                DbContext.Categorie.Remove(cat);
+                await DbContext.SaveChangesAsync();
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Info,
+                    Summary = "Eliminata",
+                    Detail = $"Categoria '#{nomeCategoria}' rimossa con successo.",
+                    Duration = 2500
+                });
+
+                if (editingId == categoriaId) AnnullaModifica();
+
+                await CaricaCategorie();
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore Eliminazione",
+                Detail = ex.Message,
+                Duration = 3500
+            });
+        }
+        finally
+        {
+            isActionLoading = false;
+        }
+    }
+
+    public class CategoriaFormModel
+    {
+        [Required(ErrorMessage = "Il nome dell'hashtag è obbligatorio.")]
+        [StringLength(50, ErrorMessage = "Massimo 50 caratteri.")]
+        public string NomeCategoria { get; set; } = string.Empty;
+    }
+}

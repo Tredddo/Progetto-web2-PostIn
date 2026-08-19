@@ -1,0 +1,390 @@
+@page "/profile"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using PostIn.Data
+@using PostIn.Data.Entities
+@using PostIn.Components.Shared
+@using Radzen
+@using Radzen.Blazor
+@inject ApplicationDbContext DbContext
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+@inject IWebHostEnvironment Environment
+
+<RadzenNotification />
+
+<PageTitle>Il Mio Profilo - PostIn</PageTitle>
+
+<div class="mx-auto" style="max-width:52em;">
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
+        </div>
+    }
+    else if (dipendente == null)
+    {
+        <div class="alert alert-danger">Profilo non trovato. Prova a effettuare nuovamente il login.</div>
+    }
+    else
+    {
+        <!-- Header Profilo -->
+        <ProfileHero Dipendente="dipendente"
+                     FollowingCount="followingCount"
+                     FollowersCount="followersCount" />
+
+        <div class="row g-4">
+            <!-- Colonna Sinistra: Categorie Preferite & Attività -->
+            <div class="col-md-5">
+                <CategorySelector Categories="tutteCategorie"
+                                  SelectedCategoryIds="categoriePreferiteIds"
+                                  IsDisabled="isUpdatingCategory"
+                                  Message="@preferitiMessage"
+                                  OnToggle="ToggleCategoriaPreferita" />
+
+                <RecentActivity UltimoAccesso="ultimoAccesso" />
+            </div>
+
+            <!-- Colonna Destra: I Miei Post -->
+            <div class="col-md-7">
+                <UserPostsList Posts="ArticoliVisibili"
+                               IsActionLoading="isActionLoading"
+                               OnDeletePost="RichiediEliminazioneArticolo" />
+            </div>
+        </div>
+    }
+</div>
+
+<!-- NOTIFICA CON TASTO ANNULLA (UNDO PATTERN) -->
+@if (mostraNotificaAnnulla && articoloInCancellazione != null)
+{
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1090;">
+        <div class="card border-0 shadow-lg bg-dark text-white p-3 d-flex flex-row align-items-center gap-3" 
+             style="border-radius: 1rem; min-width: 22em; border: 1px solid rgba(255,255,255,0.15) !important;">
+            
+            <div class="d-flex align-items-center gap-2 flex-grow-1 min-w-0">
+                <RadzenIcon Icon="delete" Style="color: #f87171; font-size: 1.3em;" class="flex-shrink-0" />
+                <div class="min-w-0">
+                    <div class="fw-semibold text-truncate small">Articolo rimosso</div>
+                    <div class="text-white-50 text-truncate" style="font-size: 0.75rem;">
+                        @articoloInCancellazione.Titolo
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex align-items-center gap-1.5 flex-shrink-0">
+                <button type="button" 
+                        class="btn btn-warning btn-sm fw-bold px-3 py-1 d-flex align-items-center gap-1 rounded-pill"
+                        style="font-size: 0.8rem;"
+                        @onclick="AnnullaEliminazione">
+                    <RadzenIcon Icon="undo" Style="font-size: 0.95em;" />
+                    Annulla
+                </button>
+                <button type="button" 
+                        class="btn-close btn-close-white p-1.5" 
+                        style="font-size: 0.65rem;"
+                        aria-label="Elimina definitivamente" 
+                        @onclick="ConfermaEliminazioneImmediata"></button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private bool isActionLoading = false;
+    private int currentUserId = 0;
+    private Dipendente? dipendente;
+    private List<Categoria> tutteCategorie = new();
+    private HashSet<int> categoriePreferiteIds = new();
+    private int followingCount = 0;
+    private int followersCount = 0;
+    private DateTime? ultimoAccesso;
+    private string preferitiMessage = string.Empty;
+
+    // Gestione Undo / Eliminazione Differita
+    private Articolo? articoloInCancellazione;
+    private bool mostraNotificaAnnulla = false;
+    private CancellationTokenSource? deleteCts;
+
+    private ICollection<Articolo> ArticoliVisibili =>
+        dipendente?.Articoliscritti
+            .Where(a => articoloInCancellazione == null || a.ID_Articolo != articoloInCancellazione.ID_Articolo)
+            .ToList() ?? new List<Articolo>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userIdClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        int.TryParse(userIdClaim, out currentUserId);
+
+        await CaricaProfilo();
+    }
+
+    private async Task CaricaProfilo()
+    {
+        isLoading = true;
+        try
+        {
+            dipendente = await DbContext.Dipendenti
+                .Include(d => d.Articoliscritti)
+                .FirstOrDefaultAsync(d => d.ID_Dipendente == currentUserId);
+
+            if (dipendente != null)
+            {
+                // Assegna il timestamp aggiornato al login
+                ultimoAccesso = dipendente.UltimoAccesso;
+
+                categoriePreferiteIds = (await DbContext.CategoriePreferite
+                    .AsNoTracking()
+                    .Where(cp => cp.FK_Dipendente == currentUserId)
+                    .Select(cp => cp.FK_Categoria)
+                    .ToListAsync())
+                    .ToHashSet();
+            }
+
+            tutteCategorie = await DbContext.Categorie.AsNoTracking().OrderBy(c => c.NomeCategoria).ToListAsync();
+            followingCount = await DbContext.IscrizioniFollow.CountAsync(f => f.FK_Follower == currentUserId);
+            followersCount = await DbContext.IscrizioniFollow.CountAsync(f => f.FK_Followed == currentUserId);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private bool isUpdatingCategory = false;
+
+    private async Task ToggleCategoriaPreferita(int categoriaId)
+    {
+        if (currentUserId <= 0 || isUpdatingCategory) return;
+        isUpdatingCategory = true;
+
+        var eraGiaSelezionata = categoriePreferiteIds.Contains(categoriaId);
+
+        var nuovoSet = new HashSet<int>(categoriePreferiteIds);
+        if (eraGiaSelezionata) nuovoSet.Remove(categoriaId);
+        else nuovoSet.Add(categoriaId);
+        categoriePreferiteIds = nuovoSet;
+        StateHasChanged();
+
+        try
+        {
+            var recordEsistente = await DbContext.CategoriePreferite
+                .FirstOrDefaultAsync(cp => cp.FK_Dipendente == currentUserId && cp.FK_Categoria == categoriaId);
+
+            if (!eraGiaSelezionata && recordEsistente == null)
+            {
+                DbContext.CategoriePreferite.Add(new CategoriaPreferita
+                {
+                    FK_Dipendente = currentUserId,
+                    FK_Categoria = categoriaId
+                });
+                await DbContext.SaveChangesAsync();
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Preferenze",
+                    Detail = "Categoria aggiunta ai preferiti!",
+                    Duration = 2500
+                });
+            }
+            else if (eraGiaSelezionata && recordEsistente != null)
+            {
+                DbContext.CategoriePreferite.Remove(recordEsistente);
+                await DbContext.SaveChangesAsync();
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Info,
+                    Summary = "Preferenze",
+                    Detail = "Categoria rimossa dai preferiti.",
+                    Duration = 2500
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ERRORE PREFERENZE]: {ex.Message}");
+            await CaricaProfilo();
+
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore",
+                Detail = "Impossibile salvare la preferenza.",
+                Duration = 3000
+            });
+        }
+        finally
+        {
+            isUpdatingCategory = false;
+            StateHasChanged();
+        }
+    }
+
+    #region Gestione Eliminazione Post & File con Undo
+
+    private async Task RichiediEliminazioneArticolo(int articoloId)
+    {
+        if (articoloInCancellazione != null)
+        {
+            await EseguiCancellazioneEffettiva(articoloInCancellazione.ID_Articolo);
+        }
+
+        var post = dipendente?.Articoliscritti.FirstOrDefault(a => a.ID_Articolo == articoloId);
+        if (post == null) return;
+
+        articoloInCancellazione = post;
+        mostraNotificaAnnulla = true;
+        deleteCts?.Cancel();
+        deleteCts = new CancellationTokenSource();
+
+        StateHasChanged();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(5000, deleteCts.Token);
+
+                await InvokeAsync(async () =>
+                {
+                    if (articoloInCancellazione != null && !deleteCts.IsCancellationRequested)
+                    {
+                        var idDaEliminare = articoloInCancellazione.ID_Articolo;
+                        mostraNotificaAnnulla = false;
+                        articoloInCancellazione = null;
+                        await EseguiCancellazioneEffettiva(idDaEliminare);
+                    }
+                });
+            }
+            catch (TaskCanceledException)
+            {
+            }
+        });
+    }
+
+    private void AnnullaEliminazione()
+    {
+        if (deleteCts != null && !deleteCts.IsCancellationRequested)
+        {
+            deleteCts.Cancel();
+        }
+
+        articoloInCancellazione = null;
+        mostraNotificaAnnulla = false;
+        StateHasChanged();
+
+        NotificationService.Notify(new NotificationMessage
+        {
+            Severity = NotificationSeverity.Info,
+            Summary = "Operazione Annullata",
+            Detail = "L'articolo non è stato eliminato.",
+            Duration = 2500
+        });
+    }
+
+    private async Task ConfermaEliminazioneImmediata()
+    {
+        if (deleteCts != null && !deleteCts.IsCancellationRequested)
+        {
+            deleteCts.Cancel();
+        }
+
+        if (articoloInCancellazione != null)
+        {
+            var idDaEliminare = articoloInCancellazione.ID_Articolo;
+            mostraNotificaAnnulla = false;
+            articoloInCancellazione = null;
+            await EseguiCancellazioneEffettiva(idDaEliminare);
+        }
+    }
+
+    private async Task EseguiCancellazioneEffettiva(int articoloId)
+    {
+        isActionLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var articolo = await DbContext.Articoli
+                .FirstOrDefaultAsync(a => a.ID_Articolo == articoloId);
+
+            if (articolo != null)
+            {
+                // Cancellazione fisica del file dalla cartella protetta Uploads/Covers
+                if (!string.IsNullOrWhiteSpace(articolo.ImmagineCopertina) &&
+                    articolo.ImmagineCopertina.StartsWith("/uploads/covers/"))
+                {
+                    try
+                    {
+                        var fileName = Path.GetFileName(articolo.ImmagineCopertina);
+                        var fullPhysicalPath = Path.Combine(Environment.ContentRootPath, "Uploads", "Covers", fileName);
+                        if (File.Exists(fullPhysicalPath))
+                        {
+                            File.Delete(fullPhysicalPath);
+                        }
+                    }
+                    catch (Exception fileEx)
+                    {
+                        Console.WriteLine($"[AVVISO PULIZIA FILE]: {fileEx.Message}");
+                    }
+                }
+
+                // Pulizia dipendenze
+                var artCategorie = DbContext.ArticoloCategorie.Where(ac => ac.FK_Articolo == articoloId);
+                var commenti = DbContext.Commenti.Where(c => c.FK_Articolo == articoloId);
+                var likes = DbContext.Likes.Where(l => l.FK_Articolo == articoloId);
+                var salvataggi = DbContext.SalvataggiDaLeggere.Where(s => s.FK_Articolo == articoloId);
+                var visualizzazioni = DbContext.Visualizzazioni.Where(v => v.FK_Articolo == articoloId);
+
+                DbContext.ArticoloCategorie.RemoveRange(artCategorie);
+                DbContext.Commenti.RemoveRange(commenti);
+                DbContext.Likes.RemoveRange(likes);
+                DbContext.SalvataggiDaLeggere.RemoveRange(salvataggi);
+                DbContext.Visualizzazioni.RemoveRange(visualizzazioni);
+
+                DbContext.Articoli.Remove(articolo);
+                await DbContext.SaveChangesAsync();
+
+                await CaricaProfilo();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ERRORE ELIMINAZIONE]: {ex.Message}");
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore",
+                Detail = "Non è stato possibile completare l'eliminazione.",
+                Duration = 3500
+            });
+            await CaricaProfilo();
+        }
+        finally
+        {
+            isActionLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (articoloInCancellazione != null)
+        {
+            deleteCts?.Cancel();
+            await EseguiCancellazioneEffettiva(articoloInCancellazione.ID_Articolo);
+        }
+        deleteCts?.Dispose();
+    }
+
+    #endregion
+}

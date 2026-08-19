@@ -1,7 +1,397 @@
 ﻿@page "/"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using PostIn.Data
+@using PostIn.Data.Entities
+@using PostIn.Components.Shared
+@using Radzen
+@using Radzen.Blazor
 
-<PageTitle>Home</PageTitle>
+@inject ApplicationDbContext _context
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
 
-<h1>Hello, world!</h1>
+<PageTitle>Feed - PostIn</PageTitle>
 
-Welcome to your new app.
+<RadzenNotification />
+
+<div class="mx-auto" style="max-width: 52em;">
+    
+    <!-- HEADER FEED -->
+    <header class="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom">
+        <div>
+            <div class="d-flex align-items-center gap-2">
+                <RadzenIcon Icon="dynamic_feed" Style="font-size: 1.6em; color: #4f46e5;" />
+                <h1 class="h3 fw-bold text-dark mb-0">Feed</h1>
+            </div>
+            <p class="text-muted small mb-0 mt-1">
+                Idee, guide e novità condivise dai colleghi dell'azienda.
+            </p>
+        </div>
+
+        <RadzenButton Icon="add"
+                      Text="Nuovo Post"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Size="ButtonSize.Medium"
+                      Style="background-color: #4f46e5; border-radius: 0.55rem; font-weight: 600;"
+                      Click='() => NavigationManager.NavigateTo("/create-post")' />
+    </header>
+
+    <!-- BARRA FILTRI (RadzenCard con pulsanti rettangolari) -->
+    <RadzenCard class="rz-shadow-sm p-2 mb-4 d-flex flex-wrap align-items-center justify-content-between gap-2" 
+                Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #f8fafc;">
+        
+        <div class="d-flex align-items-center gap-1.5">
+            <button type="button" 
+                    class="btn btn-sm px-3 py-1.5 fw-medium filter-rect-btn @(filtroSelezionato == TipoFiltro.Tutti ? "filter-active" : "filter-inactive")" 
+                    @onclick="() => CambiaFiltro(TipoFiltro.Tutti)">
+                <RadzenIcon Icon="public" Style="font-size: 0.95em;" class="me-1" />
+                Tutti i Post
+            </button>
+            <button type="button" 
+                    class="btn btn-sm px-3 py-1.5 fw-medium filter-rect-btn @(filtroSelezionato == TipoFiltro.Preferiti ? "filter-active" : "filter-inactive")" 
+                    @onclick="() => CambiaFiltro(TipoFiltro.Preferiti)">
+                <RadzenIcon Icon="loyalty" Style="font-size: 0.95em;" class="me-1" />
+                Argomenti Preferiti
+                @if (categoriePreferiteIds.Any())
+                {
+                    <span class="count-badge ms-1">@categoriePreferiteIds.Count</span>
+                }
+            </button>
+            <button type="button" 
+                    class="btn btn-sm px-3 py-1.5 fw-medium filter-rect-btn @(filtroSelezionato == TipoFiltro.Seguiti ? "filter-active" : "filter-inactive")" 
+                    @onclick="() => CambiaFiltro(TipoFiltro.Seguiti)">
+                <RadzenIcon Icon="people" Style="font-size: 0.95em;" class="me-1" />
+                Colleghi Seguiti
+                @if (utentiSeguitiIds.Any())
+                {
+                    <span class="count-badge ms-1">@utentiSeguitiIds.Count</span>
+                }
+            </button>
+        </div>
+
+        <span class="text-muted small pe-2 d-none d-md-inline">
+            <strong>@ArticoliVisualizzati.Count()</strong> @(ArticoliVisualizzati.Count() == 1 ? "post" : "post")
+        </span>
+    </RadzenCard>
+
+    <!-- CARICAMENTO / EMPTY STATE / LISTA POST -->
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
+            <p class="text-muted small mt-2">Aggiornamento del feed in corso...</p>
+        </div>
+    }
+    else if (!ArticoliVisualizzati.Any())
+    {
+        <RadzenCard class="rz-shadow-sm p-5 text-center" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+            @if (filtroSelezionato == TipoFiltro.Preferiti)
+            {
+                <RadzenIcon Icon="label_off" Style="font-size: 3em; color: #94a3b8;" class="mb-3 d-block" />
+                <h2 class="h5 fw-bold text-dark mb-1">Nessun articolo per i tuoi argomenti</h2>
+                <p class="text-muted small mb-3">Non ci sono post nelle categorie che hai impostato come preferite.</p>
+                <div>
+                    <RadzenButton Icon="tune"
+                                  Text="Configura preferenze nel profilo"
+                                  Variant="Variant.Outlined"
+                                  ButtonStyle="ButtonStyle.Primary"
+                                  Size="ButtonSize.Small"
+                                  Style="border-radius: 0.55rem;"
+                                  Click='() => NavigationManager.NavigateTo("/profile")' />
+                </div>
+            }
+            else if (filtroSelezionato == TipoFiltro.Seguiti)
+            {
+                <RadzenIcon Icon="person_search" Style="font-size: 3em; color: #94a3b8;" class="mb-3 d-block" />
+                <h2 class="h5 fw-bold text-dark mb-1">Nessun articolo dai colleghi seguiti</h2>
+                <p class="text-muted small mb-3">I colleghi che segui non hanno ancora pubblicato contenuti.</p>
+                <div>
+                    <RadzenButton Icon="group_add"
+                                  Text="Esplora colleghi nella rete aziendale"
+                                  Variant="Variant.Outlined"
+                                  ButtonStyle="ButtonStyle.Primary"
+                                  Size="ButtonSize.Small"
+                                  Style="border-radius: 0.55rem;"
+                                  Click='() => NavigationManager.NavigateTo("/subscriptions")' />
+                </div>
+            }
+            else
+            {
+                <RadzenIcon Icon="article" Style="font-size: 3em; color: #94a3b8;" class="mb-3 d-block" />
+                <h2 class="h5 fw-bold text-dark mb-1">Nessun post disponibile</h2>
+                <p class="text-muted small mb-3">Inizia tu la conversazione pubblicando il primo articolo aziendale!</p>
+                <div>
+                    <RadzenButton Icon="edit"
+                                  Text="Scrivi il primo post"
+                                  ButtonStyle="ButtonStyle.Primary"
+                                  Size="ButtonSize.Small"
+                                  Style="background-color: #4f46e5; border-radius: 0.55rem;"
+                                  Click='() => NavigationManager.NavigateTo("/create-post")' />
+                </div>
+            }
+        </RadzenCard>
+    }
+    else
+    {
+        <div class="d-flex flex-column gap-2 mb-5">
+            @foreach (var post in ArticoliVisualizzati)
+            {
+                var isSaved = salvatiIds.Contains(post.ID_Articolo);
+                var isLiked = post.Likes.Any(d => d.ID_Dipendente == currentUserId);
+
+                <PostCard Post="@post" 
+                          IsBookmarked="@isSaved"
+                          IsLiked="@isLiked"
+                          OnLike="HandleLike" 
+                          OnBookmark="HandleBookmark" />
+            }
+        </div>
+    }
+</div>
+
+<style>
+    /* Pulsanti filtri rettangolari */
+    .filter-rect-btn {
+        border-radius: 0.55rem !important;
+        font-size: 0.83rem;
+        transition: all 0.15s ease;
+    }
+    .filter-active {
+        background-color: #4f46e5 !important;
+        color: #ffffff !important;
+        border: 1px solid #4f46e5 !important;
+        box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+    }
+    .filter-inactive {
+        background-color: #ffffff !important;
+        color: #475569 !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+    .filter-inactive:hover {
+        background-color: #f1f5f9 !important;
+        color: #1e293b !important;
+    }
+
+    /* Badge conteggio rettangolare */
+    .count-badge {
+        background-color: rgba(255, 255, 255, 0.25);
+        color: inherit;
+        border-radius: 0.35rem;
+        padding: 0.1rem 0.45rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    .filter-inactive .count-badge {
+        background-color: #e2e8f0;
+        color: #475569;
+    }
+</style>
+
+@code {
+    private enum TipoFiltro { Tutti, Preferiti, Seguiti }
+
+    private bool isLoading = true;
+    private int currentUserId = 0;
+    private TipoFiltro filtroSelezionato = TipoFiltro.Tutti;
+
+    private List<Articolo> articoliTutti = new();
+    private HashSet<int> categoriePreferiteIds = new();
+    private HashSet<int> utentiSeguitiIds = new();
+    private HashSet<int> salvatiIds = new();
+
+    private IEnumerable<Articolo> ArticoliVisualizzati => filtroSelezionato switch
+    {
+        TipoFiltro.Preferiti => articoliTutti.Where(a => a.ArticoloCategorie.Any(ac => categoriePreferiteIds.Contains(ac.FK_Categoria))),
+        TipoFiltro.Seguiti => articoliTutti.Where(a => utentiSeguitiIds.Contains(a.FK_Autore)),
+        _ => articoliTutti
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userIdClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        int.TryParse(userIdClaim, out currentUserId);
+
+        await CaricaFeed();
+    }
+
+    private async Task CaricaFeed()
+    {
+        isLoading = true;
+        try
+        {
+            categoriePreferiteIds = (await _context.CategoriePreferite
+                .AsNoTracking()
+                .Where(cp => cp.FK_Dipendente == currentUserId)
+                .Select(cp => cp.FK_Categoria)
+                .ToListAsync())
+                .ToHashSet();
+
+            utentiSeguitiIds = (await _context.IscrizioniFollow
+                .AsNoTracking()
+                .Where(f => f.FK_Follower == currentUserId)
+                .Select(f => f.FK_Followed)
+                .ToListAsync())
+                .ToHashSet();
+
+            salvatiIds = (await _context.SalvataggiDaLeggere
+                .AsNoTracking()
+                .Where(s => s.FK_Dipendente == currentUserId)
+                .Select(s => s.FK_Articolo)
+                .ToListAsync())
+                .ToHashSet();
+
+            articoliTutti = await _context.Articoli
+                .AsNoTracking()
+                .Include(a => a.Autore)
+                .Include(a => a.ArticoloCategorie)
+                    .ThenInclude(ac => ac.Categoria)
+                .Include(a => a.Likes)
+                .Include(a => a.Commenti)
+                .OrderByDescending(a => a.DataOraCreazione)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore di Caricamento",
+                Detail = ex.Message,
+                Duration = 3500
+            });
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void CambiaFiltro(TipoFiltro nuovoFiltro)
+    {
+        filtroSelezionato = nuovoFiltro;
+    }
+
+    private async Task HandleLike(int articoloId)
+    {
+        if (currentUserId <= 0) return;
+
+        try
+        {
+            var likeEsistente = await _context.Likes
+                .FirstOrDefaultAsync(l => l.FK_Dipendente == currentUserId && l.FK_Articolo == articoloId);
+
+            var postInMemoria = articoliTutti.FirstOrDefault(a => a.ID_Articolo == articoloId);
+
+            if (likeEsistente != null)
+            {
+                _context.Likes.Remove(likeEsistente);
+                await _context.SaveChangesAsync();
+
+                if (postInMemoria != null)
+                {
+                    var dipendenteDaRimuovere = postInMemoria.Likes.FirstOrDefault(d => d.ID_Dipendente == currentUserId);
+                    if (dipendenteDaRimuovere != null) postInMemoria.Likes.Remove(dipendenteDaRimuovere);
+                }
+            }
+            else
+            {
+                var nuovoLike = new Like
+                {
+                    FK_Dipendente = currentUserId,
+                    FK_Articolo = articoloId,
+                    DataRilascio = DateTime.UtcNow
+                };
+
+                _context.Likes.Add(nuovoLike);
+                await _context.SaveChangesAsync();
+
+                if (postInMemoria != null)
+                {
+                    var dipendenteCorrente = await _context.Dipendenti
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(d => d.ID_Dipendente == currentUserId);
+
+                    if (dipendenteCorrente != null) postInMemoria.Likes.Add(dipendenteCorrente);
+                }
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore",
+                Detail = $"Impossibile registrare il Like: {ex.Message}",
+                Duration = 3000
+            });
+        }
+    }
+
+    private async Task HandleBookmark(int articoloId)
+    {
+        if (currentUserId <= 0) return;
+
+        try
+        {
+            var salvataggioEsistente = await _context.SalvataggiDaLeggere
+                .FirstOrDefaultAsync(s => s.FK_Dipendente == currentUserId && s.FK_Articolo == articoloId);
+
+            if (salvataggioEsistente != null)
+            {
+                _context.SalvataggiDaLeggere.Remove(salvataggioEsistente);
+                await _context.SaveChangesAsync();
+
+                salvatiIds.Remove(articoloId);
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Info,
+                    Summary = "Segnalibri",
+                    Detail = "Articolo rimosso da 'Da leggere dopo'.",
+                    Duration = 2500
+                });
+            }
+            else
+            {
+                _context.SalvataggiDaLeggere.Add(new SalvataggioDaLeggere
+                {
+                    FK_Dipendente = currentUserId,
+                    FK_Articolo = articoloId,
+                    DataSalvataggio = DateTime.UtcNow
+                });
+                await _context.SaveChangesAsync();
+
+                salvatiIds.Add(articoloId);
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Salvato!",
+                    Detail = "Articolo aggiunto alla tua lista 'Da leggere dopo'.",
+                    Duration = 2500
+                });
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore",
+                Detail = $"Impossibile aggiornare i segnalibri: {ex.Message}",
+                Duration = 3000
+            });
+        }
+    }
+}

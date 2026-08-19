@@ -1,0 +1,143 @@
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using PostIn.Data
+@using PostIn.Data.Entities
+@inject ApplicationDbContext DbContext
+@inject AuthenticationStateProvider AuthStateProvider
+
+<section aria-labelledby="history-heading">
+    <span id="history-heading" class="text-uppercase fw-bold text-muted px-2 mb-2 d-block" style="font-size: 0.7em; letter-spacing: 0.08em;">
+        Cronologia
+    </span>
+
+    <div class="bg-light p-2" style="border-radius: 0.85rem; border: 1px solid #e2e8f0;">
+        
+        <!-- Header Sezione -->
+        <div class="d-flex align-items-center justify-content-between px-2 py-1 mb-1">
+            <span class="d-flex align-items-center gap-2 small fw-bold text-dark" style="font-size: 0.8rem;">
+                <RadzenIcon Icon="history" Style="font-size: 1.2em; color: #6366f1;" /> Ultime letture
+            </span>
+            @if (!isLoading && lettureRecenti.Any())
+            {
+                <span class="badge bg-white text-muted border" style="font-size: 0.65rem; border-radius: 0.35rem;">Recenti</span>
+            }
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="py-3 text-center text-muted" style="font-size: 0.75rem;">
+                <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Small" class="mb-1" />
+                <span class="d-block small">Aggiornamento...</span>
+            </div>
+        }
+        else if (!lettureRecenti.Any())
+        {
+            <div class="px-2 py-3 text-center text-muted" style="font-size: 0.75rem;">
+                <RadzenIcon Icon="visibility_off" Style="font-size: 1.6em; color: #94a3b8;" class="mb-1 d-block mx-auto" />
+                <span class="d-block text-secondary">Nessun articolo recente</span>
+            </div>
+        }
+        else
+        {
+            <ul class="list-unstyled mb-0 d-flex flex-column gap-1">
+                @foreach (var item in lettureRecenti)
+                {
+                    var articolo = item.Articolo;
+                    var titolo = articolo?.Titolo ?? "Articolo non disponibile";
+                    var categoria = articolo?.ArticoloCategorie?.FirstOrDefault()?.Categoria?.NomeCategoria ?? "Generale";
+                    var dataVisualizzazione = item.DataOraVisualizzazione.ToLocalTime();
+                    var orarioFormattato = dataVisualizzazione.Date == DateTime.Today 
+                        ? dataVisualizzazione.ToString("HH:mm") 
+                        : dataVisualizzazione.ToString("dd/MM");
+
+                    <li>
+                        @if (articolo != null)
+                        {
+                            <a href="/post/@item.FK_Articolo" class="history-item text-decoration-none d-block px-2 py-1.5" style="border-radius: 0.5rem;" title="@titolo">
+                                <span class="text-dark small fw-medium d-block text-truncate" style="font-size: 0.8rem; line-height: 1.2;">
+                                    @orarioFormattato · @titolo
+                                </span>
+                                <span class="text-muted d-block text-truncate" style="font-size: 0.68rem; margin-top: 2px;">
+                                    #@categoria
+                                </span>
+                            </a>
+                        }
+                        else
+                        {
+                            <div class="px-2 py-1 opacity-50" style="font-size: 0.78rem;">
+                                <span class="text-muted fst-italic">@titolo</span>
+                            </div>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+
+        <!-- Link Archivio Completo -->
+        <div class="pt-2 mt-1 border-top" style="border-color: #e2e8f0 !important;">
+            <a href="/history" class="history-link d-flex align-items-center justify-content-between text-decoration-none px-2 py-1" style="font-size: 0.75rem; border-radius: 0.4rem;">
+                <span class="fw-semibold" style="color: #4338ca;">Tutta la cronologia</span>
+                <RadzenIcon Icon="arrow_forward" Style="font-size: 1.1em; color: #4338ca;" />
+            </a>
+        </div>
+
+    </div>
+</section>
+
+<style>
+    .history-item {
+        transition: background-color 0.15s ease;
+    }
+    .history-item:hover {
+        background-color: #e2e8f0;
+    }
+    .history-link {
+        transition: background-color 0.15s ease;
+    }
+    .history-link:hover {
+        background-color: #e0e7ff;
+    }
+</style>
+
+@code {
+    private bool isLoading = true;
+    private List<Visualizzazione> lettureRecenti = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var userIdClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (int.TryParse(userIdClaim, out int userId))
+            {
+                var rawViews = await DbContext.Visualizzazioni
+                    .AsNoTracking()
+                    .Where(v => v.FK_Dipendente == userId)
+                    .Include(v => v.Articolo)
+                        .ThenInclude(a => a!.ArticoloCategorie)
+                            .ThenInclude(ac => ac.Categoria)
+                    .OrderByDescending(v => v.DataOraVisualizzazione)
+                    .Take(50)
+                    .ToListAsync();
+
+                lettureRecenti = rawViews
+                    .GroupBy(v => v.FK_Articolo)
+                    .Select(g => g.First())
+                    .Take(3)
+                    .ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Errore caricamento cronologia widget: {ex.Message}");
+            lettureRecenti = new();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

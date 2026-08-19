@@ -14,8 +14,14 @@
     <HeadOutlet />
 </head>
 
+<script>
+    window.toggleAppSidebar = function () {
+        document.body.classList.toggle('sidebar-collapsed');
+    };
+</script>
+
 <body>
-    <Routes />
+    <Routes  />
     <script src="_framework/blazor.web.js"></script>
     <script src="_content/Radzen.Blazor/Radzen.Blazor.js"></script>
 </body>

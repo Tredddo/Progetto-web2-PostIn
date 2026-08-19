@@ -1,30 +1,110 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">PostIn</a>
-    </div>
-</div>
+@using PostIn.Components.Shared
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+<nav class="d-flex flex-column gap-2" style="padding: 0.75em 0.5em;" aria-label="Menu principale di navigazione">
+    
+    <!-- SEZIONE: PIATTAFORMA -->
+    <section>
+        <span class="text-uppercase fw-bold text-muted d-block" style="font-size: 0.75em; letter-spacing: 0.06em; padding: 0.25em 0.75em 0.4em 0.75em;">
+            Piattaforma
+        </span>
+        <ul class="nav nav-pills flex-column gap-1">
+            <li class="nav-item">
+                <NavLink href="/" class="nav-link text-secondary d-flex align-items-center gap-3" Match="NavLinkMatch.All" style="border-radius: 0.6em; padding: 0.5em 0.75em; font-size: 0.95em;">
+                    <RadzenIcon Icon="dynamic_feed" Style="font-size: 1.25em;" />
+                    <span class="fw-medium">Feed</span>
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink href="/subscriptions" class="nav-link text-secondary d-flex align-items-center gap-3" style="border-radius: 0.6em; padding: 0.5em 0.75em; font-size: 0.95em;">
+                    <RadzenIcon Icon="group" Style="font-size: 1.25em;" />
+                    <span class="fw-medium">Iscrizioni</span>
+                </NavLink>
+            </li>
+        </ul>
+    </section>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
+    <!-- SEZIONE: AREA PERSONALE -->
+    <section class="pt-2 border-top" style="border-color: #f1f5f9 !important;">
+        <span class="text-uppercase fw-bold text-muted d-block" style="font-size: 0.75em; letter-spacing: 0.06em; padding: 0.25em 0.75em 0.4em 0.75em;">
+            Area Personale
+        </span>
+        <ul class="nav nav-pills flex-column gap-1">
+            <li class="nav-item">
+                <NavLink href="/profile" class="nav-link text-secondary d-flex align-items-center gap-3" style="border-radius: 0.6em; padding: 0.5em 0.75em; font-size: 0.95em;">
+                    <RadzenIcon Icon="badge" Style="font-size: 1.25em;" />
+                    <span class="fw-medium">Profilo</span>
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink href="/saved" class="nav-link text-secondary d-flex align-items-center gap-3" style="border-radius: 0.6em; padding: 0.5em 0.75em; font-size: 0.95em;">
+                    <RadzenIcon Icon="bookmark_border" Style="font-size: 1.25em;" />
+                    <span class="fw-medium">Post Salvati</span>
+                </NavLink>
+            </li>
+        </ul>
+    </section>
+
+    <!-- SEZIONE: CRONOLOGIA WIDGET -->
+    <section class="pt-2 border-top" style="border-color: #f1f5f9 !important;">
+        <RecentHistoryWidget />
+    </section>
+
+    <!-- SEZIONE: ADMIN (solo per amministratori) -->
+    <AuthorizeView Roles="Admin">
+        <Authorized>
+            <section class="pt-2 border-top" style="border-color: #f1f5f9 !important;">
+                <span class="text-uppercase fw-bold d-block" style="font-size: 0.75em; letter-spacing: 0.06em; padding: 0.25em 0.75em 0.4em 0.75em; color: #dc2626;">
+                    Amministrazione
+                </span>
+                <ul class="nav nav-pills flex-column gap-1">
+                    <li class="nav-item">
+                        <NavLink href="/admin/users" class="nav-link text-secondary d-flex align-items-center gap-3" style="border-radius: 0.6em; padding: 0.5em 0.75em; font-size: 0.95em;">
+                            <RadzenIcon Icon="manage_accounts" Style="font-size: 1.25em;" />
+                            <span class="fw-medium">Utenti</span>
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink href="/admin/categories" class="nav-link text-secondary d-flex align-items-center gap-3" style="border-radius: 0.6em; padding: 0.5em 0.75em; font-size: 0.95em;">
+                            <RadzenIcon Icon="label" Style="font-size: 1.25em;" />
+                            <span class="fw-medium">Categorie</span>
+                        </NavLink>
+                    </li>
+                    <li class="nav-item">
+                        <NavLink href="/admin/posts" class="nav-link text-secondary d-flex align-items-center gap-3" style="border-radius: 0.6em; padding: 0.5em 0.75em; font-size: 0.95em;">
+                            <RadzenIcon Icon="article" Style="font-size: 1.25em;" />
+                            <span class="fw-medium">Tutti i Post</span>
+                        </NavLink>
+                    </li>
+                </ul>
+            </section>
+        </Authorized>
+    </AuthorizeView>
+
+    <!-- SEZIONE: SHORTCUT CREAZIONE
+    <section class="pt-2 border-top" style="border-color: #f1f5f9 !important;">
+        <div style="padding: 0 0.5em;">
+            <a href="/create-post" class="btn btn-outline-primary w-100 d-flex align-items-center justify-content-center gap-2 fw-semibold" style="border-radius: 0.6em; font-size: 0.95em; padding: 0.6em 0.75em;">
+                <RadzenIcon Icon="add_circle_outline" Style="font-size: 1.25em;" />
+                <span>Nuovo Post</span>
+            </a>
         </div>
+    </section>-->
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
-        </div>
+</nav>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-            </NavLink>
-        </div>
-    </nav>
-</div>
-
+<style>
+    .nav-link {
+        transition: background-color 0.15s ease, color 0.15s ease;
+    }
+    .nav-link:hover {
+        background-color: #f1f5f9;
+        color: #1e1b4b !important;
+    }
+    .nav-link.active {
+        background-color: #e0e7ff !important;
+        color: #4338ca !important;
+        font-weight: 600;
+    }
+</style>

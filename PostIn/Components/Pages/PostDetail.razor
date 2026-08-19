@@ -1,0 +1,516 @@
+@page "/post/{Id:int}"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using PostIn.Data
+@using PostIn.Data.Entities
+@using Radzen
+@using Radzen.Blazor
+
+@inject ApplicationDbContext DbContext
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+
+<PageTitle>@(articolo?.Titolo ?? "Caricamento Articolo") - PostIn</PageTitle>
+
+<RadzenNotification />
+
+@if (isLoading)
+{
+    <div class="text-center py-5">
+        <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
+        <p class="text-muted mt-3 small">Caricamento articolo in corso...</p>
+    </div>
+}
+else if (articolo == null)
+{
+    <RadzenCard class="rz-shadow-sm p-5 text-center mx-auto" Style="max-width: 36em; border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+        <RadzenIcon Icon="search_off" Style="font-size: 3em; color: #94a3b8;" class="mb-3 d-block" />
+        <h1 class="h4 fw-bold text-dark mb-1">Articolo non trovato</h1>
+        <p class="text-muted small mb-4">L'articolo che cerchi potrebbe essere stato rimosso dall'autore o dall'amministratore.</p>
+        <RadzenButton Icon="arrow_back"
+                      Text="Torna al Feed"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Size="ButtonSize.Medium"
+                      Style="background-color: #4f46e5; border-radius: 0.55rem;"
+                      Click='() => NavigationManager.NavigateTo("/")' />
+    </RadzenCard>
+}
+else
+{
+    <div class="mx-auto" style="max-width: 54em;">
+
+        <!-- BREADCRUMB -->
+        <nav aria-label="Percorso di navigazione" class="mb-3 px-1">
+            <ol class="breadcrumb small text-muted mb-0">
+                <li class="breadcrumb-item">
+                    <a href="/" class="text-decoration-none fw-medium d-inline-flex align-items-center gap-1" style="color: #4f46e5;">
+                        <RadzenIcon Icon="dynamic_feed" Style="font-size: 1.1em;" /> Feed
+                    </a>
+                </li>
+                <li class="breadcrumb-item active text-truncate" aria-current="page" style="max-width: 250px;">
+                    @articolo.Titolo
+                </li>
+            </ol>
+        </nav>
+
+        <!-- CARD PRINCIPALE ARTICOLO -->
+        <RadzenCard class="rz-shadow-sm mb-4 p-0 overflow-hidden" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+
+            @if (!string.IsNullOrWhiteSpace(articolo.ImmagineCopertina))
+            {
+                <img src="@articolo.ImmagineCopertina" 
+                     class="w-100 border-bottom" 
+                     alt="Immagine di copertina" 
+                     style="max-height: 22em; object-fit: cover;" />
+            }
+
+            <div class="p-4 p-md-5">
+
+                <!-- Categorie/Hashtag -->
+                <div class="d-flex flex-wrap gap-1.5 mb-3">
+                    @if (articolo.ArticoloCategorie != null)
+                    {
+                        foreach (var ac in articolo.ArticoloCategorie)
+                        {
+                            <span class="category-badge">
+                                #@ac.Categoria?.NomeCategoria
+                            </span>
+                        }
+                    }
+                </div>
+
+                <!-- Titolo -->
+                <h1 class="fw-bold text-dark mb-3" style="font-size: 2em; line-height: 1.25; letter-spacing: -0.02em;">
+                    @articolo.Titolo
+                </h1>
+
+                <!-- Meta Autore + Data -->
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4 pb-4 border-bottom">
+                    <div class="d-flex align-items-center gap-3">
+                        <RadzenGravatar Email="@articolo.Autore?.Username" Style="width: 3em; height: 3em; border-radius: 0.65rem; flex-shrink: 0;" />
+                        <div>
+                            <span class="fw-bold text-dark d-block" style="font-size: 0.95rem;">
+                                @(articolo.Autore != null ? $"{articolo.Autore.Nome} {articolo.Autore.Cognome}" : "Anonimo")
+                            </span>
+                            <span class="text-muted" style="font-size: 0.8rem;">
+                                @@@articolo.Autore?.Username
+                            </span>
+                        </div>
+                    </div>
+
+                    <time datetime="@articolo.DataOraCreazione.ToString("yyyy-MM-ddTHH:mm:ssZ")" class="text-muted small d-flex align-items-center gap-1.5 px-3 py-1.5 bg-light rounded-pill border">
+                        <RadzenIcon Icon="calendar_today" Style="font-size: 1em;" />
+                        <span class="fw-medium">@articolo.DataOraCreazione.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</span>
+                    </time>
+                </div>
+
+                <!-- Corpo del testo -->
+                <div class="article-body text-dark lh-lg mb-5" style="font-size: 1.1rem; white-space: pre-wrap;">
+                    @articolo.CorpoTesto
+                </div>
+
+                <!-- BARRA INTERAZIONI (Like & Salva) -->
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 pt-4 border-top">
+                    <div class="d-flex align-items-center gap-2.5">
+
+                        <!-- Pulsante Like -->
+                        <button type="button"
+                                class="btn d-inline-flex align-items-center gap-1.5 px-4 py-2 fw-semibold transition-all action-rect-btn @(haLiked ? "btn-like-active" : "btn-light text-secondary border")"
+                                @onclick="ToggleLike" disabled="@isActionLoading">
+                            <RadzenIcon Icon="@(haLiked ? "favorite" : "favorite_border")" 
+                                        Style="@(haLiked ? "font-size: 1.2em; color: #ef4444;" : "font-size: 1.2em;")" />
+                            <span>@likeCount Mi piace</span>
+                        </button>
+
+                        <!-- Pulsante Salva -->
+                        <button type="button"
+                                class="btn d-inline-flex align-items-center gap-1.5 px-4 py-2 fw-semibold transition-all action-rect-btn @(haSalvato ? "btn-bookmark-active" : "btn-light text-secondary border")"
+                                @onclick="ToggleSalvataggio" disabled="@isActionLoading">
+                            <RadzenIcon Icon="@(haSalvato ? "bookmark" : "bookmark_border")" 
+                                        Style="@(haSalvato ? "font-size: 1.2em; color: #d97706;" : "font-size: 1.2em;")" />
+                            <span>@(haSalvato ? "Salvato" : "Salva per dopo")</span>
+                        </button>
+
+                    </div>
+
+                    <div class="d-flex align-items-center gap-1.5 text-muted small bg-light px-3 py-1.5 rounded-pill border">
+                        <RadzenIcon Icon="visibility" Style="font-size: 1.1em;" />
+                        <span class="fw-medium">@articolo.Visualizzazioni.Count @(articolo.Visualizzazioni.Count == 1 ? "visualizzazione" : "visualizzazioni")</span>
+                    </div>
+                </div>
+
+            </div>
+        </RadzenCard>
+
+        <!-- SEZIONE COMMENTI -->
+        <RadzenCard class="rz-shadow-sm mb-5" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+            <div class="p-2 p-md-3">
+                <h2 id="commenti-heading" class="h5 fw-bold mb-4 d-flex align-items-center gap-2 text-dark">
+                    <RadzenIcon Icon="forum" Style="font-size: 1.2em; color: #6366f1;" />
+                    Commenti (@articolo.Commenti.Count)
+                </h2>
+
+                <!-- Form nuovo commento -->
+                @if (currentUserId > 0)
+                {
+                    <div class="mb-4 pb-4 border-bottom">
+                        <label for="nuovoCommento" class="form-label fw-bold small text-muted text-uppercase" style="letter-spacing: 0.05em;">Lascia un commento</label>
+                        <textarea id="nuovoCommento"
+                                  class="form-control mb-2 modern-textarea"
+                                  rows="3"
+                                  placeholder="Scrivi qui la tua opinione o fai una domanda all'autore..."
+                                  @bind="nuovoCommento"
+                                  @bind:event="oninput"
+                                  maxlength="1000"></textarea>
+                        
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <span class="text-muted" style="font-size: 0.75rem;">@nuovoCommento.Length / 1000</span>
+                            <RadzenButton Icon="send"
+                                          Text="Pubblica"
+                                          ButtonStyle="ButtonStyle.Primary"
+                                          Size="ButtonSize.Small"
+                                          Style="background-color: #4f46e5; border-radius: 0.55rem; padding: 0.25rem 1rem;"
+                                          IsBusy="@isActionLoading"
+                                          Disabled="@(string.IsNullOrWhiteSpace(nuovoCommento))"
+                                          Click="PubblicaCommento" />
+                        </div>
+                    </div>
+                }
+
+                <!-- Lista commenti -->
+                @if (!articolo.Commenti.Any())
+                {
+                    <div class="text-center py-5 text-muted bg-light rounded-3 border border-dashed">
+                        <RadzenIcon Icon="chat_bubble_outline" Style="font-size: 2.5em; color: #cbd5e1;" class="d-block mx-auto mb-2" />
+                        <p class="mb-0 small fw-medium text-dark">Nessun commento ancora.</p>
+                        <p class="small text-muted mb-0">Sii il primo ad avviare la conversazione!</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="d-flex flex-column gap-4">
+                        @foreach (var commento in articolo.Commenti.OrderByDescending(c => c.DataPubblicazione))
+                        {
+                            <div class="d-flex gap-3">
+                                <RadzenGravatar Email="@commento.Autore?.Username" Style="width: 2.6em; height: 2.6em; border-radius: 0.55rem; flex-shrink: 0;" />
+                                
+                                <div class="flex-grow-1 bg-light p-3 rounded-3 border">
+                                    <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+                                        <span class="fw-bold text-dark small">
+                                            @(commento.Autore != null ? $"{commento.Autore.Nome} {commento.Autore.Cognome}" : "Anonimo")
+                                        </span>
+                                        <time class="text-muted" style="font-size: 0.75rem;">
+                                            @commento.DataPubblicazione.ToLocalTime().ToString("dd MMM yyyy, HH:mm")
+                                        </time>
+                                    </div>
+                                    <p class="mb-0 text-dark" style="font-size: 0.95rem; line-height: 1.5; white-space: pre-wrap;">
+                                        @commento.TestoCommento
+                                    </p>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </RadzenCard>
+
+    </div>
+}
+
+<style>
+    .article-body { 
+            /* Stack di font moderni, puliti e nativi per ogni sistema operativo */
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #334155; /* Grigio scuro morbido, stanca meno la vista rispetto al nero puro */
+            line-height: 1.75; /* Spaziatura generosa tra le righe per facilitare la lettura */
+            letter-spacing: 0.01em;
+        }
+
+    .category-badge {
+        background-color: #f1f5f9;
+        color: #4338ca;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.45rem;
+        padding: 0.25rem 0.75rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .modern-textarea {
+        border-radius: 0.65rem; 
+        resize: none; 
+        border-color: #e2e8f0;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .modern-textarea:focus {
+        border-color: #818cf8;
+        box-shadow: 0 0 0 0.25rem rgba(99, 102, 241, 0.25);
+    }
+
+    /* Pulsanti Interattivi Stondati */
+    .action-rect-btn {
+        border-radius: 0.65rem !important;
+        font-size: 0.9rem;
+    }
+
+    /* Stile Like Attivo */
+    .btn-like-active {
+        background-color: #fee2e2 !important;
+        color: #b91c1c !important;
+        border: 1px solid #fca5a5 !important;
+    }
+
+    /* Stile Bookmark Attivo (Giallo / Ambra) */
+    .btn-bookmark-active {
+        background-color: #fef3c7 !important;
+        color: #b45309 !important;
+        border: 1px solid #fcd34d !important;
+        box-shadow: 0 0 8px rgba(245, 158, 11, 0.25) !important;
+    }
+    .btn-bookmark-active:hover {
+        background-color: #fde68a !important;
+        color: #92400e !important;
+    }
+
+    .transition-all {
+        transition: all 0.15s ease-in-out;
+    }
+</style>
+
+@code {
+    [Parameter] 
+    public int Id { get; set; }
+
+    private Articolo? articolo;
+    private bool isLoading = true;
+    private bool isActionLoading = false;
+    private int currentUserId = 0;
+    
+    private bool haLiked = false;
+    private bool haSalvato = false;
+    private int likeCount = 0;
+    private string nuovoCommento = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userIdClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        int.TryParse(userIdClaim, out currentUserId);
+
+        await CaricaArticolo();
+        await RegistraVisualizzazione();
+    }
+
+    private async Task CaricaArticolo()
+    {
+        isLoading = true;
+        try
+        {
+            articolo = await DbContext.Articoli
+                .AsNoTracking()
+                .Include(a => a.Autore)
+                .Include(a => a.ArticoloCategorie).ThenInclude(ac => ac.Categoria)
+                .Include(a => a.Commenti).ThenInclude(c => c.Autore)
+                .Include(a => a.Visualizzazioni)
+                .Include(a => a.Likes)
+                .FirstOrDefaultAsync(a => a.ID_Articolo == Id);
+
+            if (articolo != null && currentUserId > 0)
+            {
+                haLiked = articolo.Likes.Any(d => d.ID_Dipendente == currentUserId);
+                haSalvato = await DbContext.SalvataggiDaLeggere
+                    .AnyAsync(s => s.FK_Dipendente == currentUserId && s.FK_Articolo == Id);
+                likeCount = articolo.Likes.Count;
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore di Caricamento",
+                Detail = ex.Message,
+                Duration = 3500
+            });
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RegistraVisualizzazione()
+    {
+        if (currentUserId <= 0 || articolo == null) return;
+        try
+        {
+            DbContext.Visualizzazioni.Add(new Visualizzazione
+            {
+                FK_Dipendente = currentUserId,
+                FK_Articolo = Id,
+                DataOraVisualizzazione = DateTime.UtcNow
+            });
+            await DbContext.SaveChangesAsync();
+        }
+        catch { /* Ignoro errori in caso di inserimento rapido multiplo */ }
+    }
+
+    private async Task ToggleLike()
+    {
+        if (currentUserId <= 0 || isActionLoading) return;
+        isActionLoading = true;
+
+        try
+        {
+            var like = await DbContext.Likes
+                .FirstOrDefaultAsync(l => l.FK_Dipendente == currentUserId && l.FK_Articolo == Id);
+
+            if (like != null)
+            {
+                DbContext.Likes.Remove(like);
+                haLiked = false;
+                likeCount--;
+            }
+            else
+            {
+                DbContext.Likes.Add(new Like
+                {
+                    FK_Dipendente = currentUserId,
+                    FK_Articolo = Id,
+                    DataRilascio = DateTime.UtcNow
+                });
+                haLiked = true;
+                likeCount++;
+            }
+            
+            await DbContext.SaveChangesAsync();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore",
+                Detail = $"Impossibile registrare il Like: {ex.Message}",
+                Duration = 3000
+            });
+        }
+        finally
+        {
+            isActionLoading = false;
+        }
+    }
+
+    private async Task ToggleSalvataggio()
+    {
+        if (currentUserId <= 0 || isActionLoading) return;
+        isActionLoading = true;
+
+        try
+        {
+            var salvataggio = await DbContext.SalvataggiDaLeggere
+                .FirstOrDefaultAsync(s => s.FK_Dipendente == currentUserId && s.FK_Articolo == Id);
+
+            if (salvataggio != null)
+            {
+                DbContext.SalvataggiDaLeggere.Remove(salvataggio);
+                haSalvato = false;
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Info,
+                    Summary = "Segnalibri",
+                    Detail = "Articolo rimosso dai salvati.",
+                    Duration = 2500
+                });
+            }
+            else
+            {
+                DbContext.SalvataggiDaLeggere.Add(new SalvataggioDaLeggere
+                {
+                    FK_Dipendente = currentUserId,
+                    FK_Articolo = Id,
+                    DataSalvataggio = DateTime.UtcNow
+                });
+                haSalvato = true;
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Salvato!",
+                    Detail = "Articolo salvato nella tua lista da leggere.",
+                    Duration = 2500
+                });
+            }
+            
+            await DbContext.SaveChangesAsync();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore",
+                Detail = $"Impossibile salvare l'articolo: {ex.Message}",
+                Duration = 3000
+            });
+        }
+        finally
+        {
+            isActionLoading = false;
+        }
+    }
+
+    private async Task PubblicaCommento()
+    {
+        if (string.IsNullOrWhiteSpace(nuovoCommento) || currentUserId <= 0 || isActionLoading) return;
+        isActionLoading = true;
+
+        try
+        {
+            DbContext.Commenti.Add(new Commento
+            {
+                FK_Autore = currentUserId,
+                FK_Articolo = Id,
+                TestoCommento = nuovoCommento.Trim(),
+                DataPubblicazione = DateTime.UtcNow
+            });
+            
+            await DbContext.SaveChangesAsync();
+            
+            nuovoCommento = string.Empty;
+            
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = "Commento Pubblicato",
+                Detail = "Il tuo commento è stato aggiunto con successo.",
+                Duration = 2500
+            });
+
+            await CaricaArticolo(); // Ricarica i commenti dal database
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore Pubblicazione",
+                Detail = $"Impossibile pubblicare il commento: {ex.Message}",
+                Duration = 3500
+            });
+        }
+        finally
+        {
+            isActionLoading = false;
+        }
+    }
+}

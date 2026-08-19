@@ -1,0 +1,147 @@
+@using Microsoft.AspNetCore.Components.Forms
+@using Radzen
+@using Radzen.Blazor
+@inject NotificationService NotificationService
+
+<div class="card border-0 shadow-sm p-4 mb-3" style="border-radius: 1.1rem;">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+        <label class="form-label fw-bold text-dark mb-0 d-flex align-items-center gap-1.5">
+            <RadzenIcon Icon="image" Style="font-size: 1.15em; color: #6366f1;" />
+            Immagine di Copertina
+            <span class="text-muted fw-normal small">(opzionale)</span>
+        </label>
+
+        @if (!string.IsNullOrEmpty(PreviewUrl))
+        {
+            <button type="button" 
+                    class="btn btn-link text-danger text-decoration-none p-0 small d-flex align-items-center gap-1"
+                    @onclick="RimuoviImmagine"
+                    disabled="@IsProcessing">
+                <RadzenIcon Icon="delete" Style="font-size: 0.9em;" />
+                Rimuovi
+            </button>
+        }
+    </div>
+
+    <p class="text-muted small mb-3">
+        Carica un'immagine JPG, PNG o WEBP (massimo 5 MB). Il salvataggio avverrà solo alla pubblicazione.
+    </p>
+
+    <div class="mb-2">
+        <InputFile id="coverFileInput" 
+                   OnChange="HandleFileSelected" 
+                   accept=".jpg,.jpeg,.png,.webp" 
+                   class="form-control modern-input" 
+                   disabled="@IsProcessing" />
+    </div>
+
+    @if (IsProcessing)
+    {
+        <div class="d-flex align-items-center gap-2 py-2 text-muted small">
+            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Small" />
+            <span>Elaborazione anteprima...</span>
+        </div>
+    }
+
+    <!-- Anteprima Immagine (Base64 o URL esistente) -->
+    @if (!string.IsNullOrWhiteSpace(PreviewUrl))
+    {
+        <div class="mt-3 position-relative rounded-3 overflow-hidden border shadow-sm" style="max-height: 14em;">
+            <img src="@PreviewUrl" 
+                 alt="Anteprima copertina" 
+                 class="w-100 h-100" 
+                 style="object-fit: cover; max-height: 14em;" />
+        </div>
+    }
+</div>
+
+@code {
+    public class ImageData
+    {
+        public byte[] Bytes { get; set; } = Array.Empty<byte>();
+        public string Extension { get; set; } = string.Empty;
+        public string PreviewUrl { get; set; } = string.Empty;
+    }
+
+    [Parameter] public string? PreviewUrl { get; set; }
+    [Parameter] public EventCallback<ImageData?> OnImageChanged { get; set; }
+
+    private bool IsProcessing = false;
+    private const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
+    private readonly string[] PermittedExtensions = { ".jpg", ".jpeg", ".png", ".webp" };
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        // Controllo Estensione
+        var extension = Path.GetExtension(file.Name).ToLowerInvariant();
+        if (string.IsNullOrEmpty(extension) || !PermittedExtensions.Contains(extension))
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Warning,
+                Summary = "Formato non valido",
+                Detail = "Sono consentiti solo file di tipo JPG, PNG o WEBP.",
+                Duration = 3500
+            });
+            return;
+        }
+
+        // Controllo Dimensione
+        if (file.Size > MaxFileSize)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Warning,
+                Summary = "File troppo grande",
+                Detail = "L'immagine supera la dimensione massima consentita di 5 MB.",
+                Duration = 3500
+            });
+            return;
+        }
+
+        IsProcessing = true;
+
+        try
+        {
+            // Lettura dei byte in memoria (senza scrivere sul disco)
+            await using var stream = file.OpenReadStream(maxAllowedSize: MaxFileSize);
+            using var memoryStream = new MemoryStream();
+            await stream.CopyToAsync(memoryStream);
+            var fileBytes = memoryStream.ToArray();
+
+            // Creazione stringa Base64 per anteprima immediata nel browser
+            var base64Preview = $"data:{file.ContentType};base64,{Convert.ToBase64String(fileBytes)}";
+
+            var data = new ImageData
+            {
+                Bytes = fileBytes,
+                Extension = extension,
+                PreviewUrl = base64Preview
+            };
+
+            await OnImageChanged.InvokeAsync(data);
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore Lettura Immagine",
+                Detail = ex.Message,
+                Duration = 4000
+            });
+        }
+        finally
+        {
+            IsProcessing = false;
+        }
+    }
+
+    private async Task RimuoviImmagine()
+    {
+        await OnImageChanged.InvokeAsync(null);
+    }
+}

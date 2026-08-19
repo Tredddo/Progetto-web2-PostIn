@@ -1,0 +1,187 @@
+@page "/my-posts"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using PostIn.Data
+@using PostIn.Data.Entities
+@using Radzen
+@using Radzen.Blazor
+@inject ApplicationDbContext DbContext
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+@inject NotificationService NotificationService
+
+<PageTitle>I Miei Articoli - PostIn</PageTitle>
+
+<div class="mx-auto" style="max-width:52em;">
+
+    <!-- INTESTAZIONE -->
+    <header class="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom">
+        <div class="d-flex align-items-center gap-2">
+            <RadzenButton Icon="arrow_back" 
+                          Variant="Variant.Text" 
+                          ButtonStyle="ButtonStyle.Base" 
+                          Size="ButtonSize.Medium" 
+                          Click='() => NavigationManager.NavigateTo("/profile")' 
+                          aria-label="Torna al Profilo" />
+            <div>
+                <h1 class="h3 fw-bold text-dark mb-0">I Miei Articoli</h1>
+                <p class="text-muted small mb-0">Gestisci ed elimina i post che hai pubblicato</p>
+            </div>
+        </div>
+
+        <RadzenButton Icon="add" 
+                      Text="Crea Nuovo" 
+                      ButtonStyle="ButtonStyle.Primary" 
+                      Size="ButtonSize.Small" 
+                      Style="background-color:#4f46e5; border-radius:0.55em;" 
+                      Click='() => NavigationManager.NavigateTo("/create-post")' />
+    </header>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
+        </div>
+    }
+    else if (!mieiArticoli.Any())
+    {
+        <div class="card border-0 shadow-sm p-5 text-center" style="border-radius:1em;">
+            <RadzenIcon Icon="edit_off" Style="font-size:3em; color:#94a3b8;" class="mb-3 d-block" />
+            <h2 class="h5 fw-bold text-dark">Nessun articolo pubblicato</h2>
+            <p class="text-muted small mb-4">Non hai ancora condiviso post o articoli con i tuoi colleghi.</p>
+            <div>
+                <RadzenButton Text="Scrivi il tuo primo articolo" 
+                              ButtonStyle="ButtonStyle.Primary" 
+                              Style="background-color:#4f46e5; border-radius:0.55em;" 
+                              Click='() => NavigationManager.NavigateTo("/create-post")' />
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex flex-column gap-3">
+            @foreach (var art in mieiArticoli)
+            {
+                <div class="card border-0 shadow-sm p-3 p-md-4" style="border-radius:1em;">
+                    <div class="d-flex flex-column flex-md-row justify-content-between gap-3">
+                        <div class="flex-grow-1">
+                            <a href="/post/@art.ID_Articolo" class="h5 fw-bold text-dark text-decoration-none d-block mb-1 post-title-link">
+                                @art.Titolo
+                            </a>
+                            <p class="text-muted small mb-2 text-truncate" style="max-width: 38em;">
+                                @art.CorpoTesto
+                            </p>
+                            <div class="d-flex align-items-center gap-3 text-muted" style="font-size: 0.78rem;">
+                                <span><RadzenIcon Icon="calendar_today" Style="font-size:0.9em; vertical-align:-0.1em;" /> @art.DataOraCreazione.ToLocalTime().ToString("dd MMMM yyyy, HH:mm")</span>
+                            </div>
+                        </div>
+
+                        <!-- Radzen Buttons per Azione -->
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                            <RadzenButton Icon="edit" 
+                                          Text="Modifica" 
+                                          Variant="Variant.Outlined" 
+                                          ButtonStyle="ButtonStyle.Primary" 
+                                          Size="ButtonSize.Small" 
+                                          Style="border-radius:0.5em;" 
+                                          Click='() => NavigationManager.NavigateTo($"/edit-post/{art.ID_Articolo}")' />
+
+                            <RadzenButton Icon="delete" 
+                                          Text="Elimina" 
+                                          Variant="Variant.Outlined" 
+                                          ButtonStyle="ButtonStyle.Danger" 
+                                          Size="ButtonSize.Small" 
+                                          Style="border-radius:0.5em;" 
+                                          IsBusy="@(isActionLoading && deletingArticleId == art.ID_Articolo)" 
+                                          Disabled="@isActionLoading" 
+                                          Click="() => EliminaArticolo(art.ID_Articolo)" />
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .post-title-link:hover { color: #4f46e5 !important; }
+</style>
+
+@code {
+    private bool isLoading = true;
+    private bool isActionLoading = false;
+    private int deletingArticleId = 0;
+    private int currentUserId = 0;
+    private List<Articolo> mieiArticoli = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userIdClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        int.TryParse(userIdClaim, out currentUserId);
+
+        await CaricaArticoli();
+    }
+
+    private async Task CaricaArticoli()
+    {
+        isLoading = true;
+        try
+        {
+            mieiArticoli = await DbContext.Articoli
+                .Where(a => a.FK_Autore == currentUserId)
+                .OrderByDescending(a => a.DataOraCreazione)
+                .ToListAsync();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task EliminaArticolo(int articoloId)
+    {
+        if (isActionLoading) return;
+        isActionLoading = true;
+        deletingArticleId = articoloId;
+
+        try
+        {
+            var categorie = DbContext.ArticoloCategorie.Where(ac => ac.FK_Articolo == articoloId);
+            DbContext.ArticoloCategorie.RemoveRange(categorie);
+
+            var art = await DbContext.Articoli.FindAsync(articoloId);
+            if (art != null)
+            {
+                DbContext.Articoli.Remove(art);
+                await DbContext.SaveChangesAsync();
+                mieiArticoli.RemoveAll(a => a.ID_Articolo == articoloId);
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Articolo Eliminato",
+                    Detail = "L'articolo è stato rimosso con successo.",
+                    Duration = 2500
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore",
+                Detail = $"Impossibile eliminare l'articolo: {ex.Message}",
+                Duration = 3000
+            });
+        }
+        finally
+        {
+            isActionLoading = false;
+            deletingArticleId = 0;
+        }
+    }
+}

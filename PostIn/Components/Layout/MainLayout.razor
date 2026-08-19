@@ -1,77 +1,94 @@
 ﻿@inherits LayoutComponentBase
 
-<RadzenLayout>
-    <!-- TOPBAR -->
-    <RadzenHeader>
-        <div class="d-flex align-items-center justify-content-between p-2" style="width: 100%;">
-            <div class="d-flex align-items-center">
-                <RadzenSidebarToggle Click="@(() => sidebarExpanded = !sidebarExpanded)" />
-                <h3 class="mb-0 ms-2">PostIn</h3>
+<RadzenNotification />
+
+<div class="d-flex flex-column min-vh-100" style="background-color: #f8fafc;">
+    
+    <!-- HEADER FISSO -->
+    <header class="navbar navbar-expand sticky-top border-bottom" style="background-color: #1e1b4b; height: 4em; padding: 0 1.25em; z-index: 1050;" role="banner">
+        <div class="container-fluid px-0 d-flex justify-content-between align-items-center">
+            
+            <!-- Hamburger Toggle + Brand -->
+            <div class="d-flex align-items-center gap-3">
+                <button type="button" 
+                        class="btn btn-link text-white text-decoration-none shadow-none p-1 border-0 d-flex align-items-center justify-content-center burger-btn" 
+                        onclick="toggleAppSidebar()" 
+                        aria-label="Mostra o nascondi menu laterale">
+                    <RadzenIcon Icon="menu" Style="font-size: 1.6em;" />
+                </button>
+
+                <a href="/" class="text-white text-decoration-none d-flex align-items-center gap-1">
+                    <span class="fw-bolder" style="font-size: 1.35em; letter-spacing: -0.03em;">Post<span style="color: #818cf8;">In</span></span>
+                </a>
             </div>
             
-            <!-- Notifiche e Profilo Utente -->
-            <div class="d-flex align-items-center">
-                <RadzenIcon Icon="notifications" class="me-3" />
+            <!-- Profilo & Notifiche -->
+            <div class="d-flex align-items-center gap-2 gap-md-3">
+                <button type="button" 
+                        class="btn btn-link text-white text-opacity-75 text-decoration-none shadow-none p-1 border-0 d-flex align-items-center justify-content-center header-icon-btn" 
+                        aria-label="Notifiche">
+                    <RadzenIcon Icon="notifications" Style="font-size: 1.35em;" />
+                </button>
+                
                 <AuthorizeView>
                     <Authorized>
-                        <RadzenProfileMenu>
-                            <Template>
-                                <RadzenGravatar Email="@context.User.Identity?.Name" />
-                                <span class="ms-2">@context.User.Identity?.Name</span>
-                            </Template>
-                            <ChildContent>
-                                <RadzenProfileMenuItem Text="Impostazioni" Path="/settings" Icon="settings" />
-                                <RadzenProfileMenuItem Text="Logout" Path="/Account/Logout" Icon="logout" />
-                            </ChildContent>
-                        </RadzenProfileMenu>
+                        <div class="d-flex align-items-center gap-2 ps-2 border-start border-light border-opacity-25">
+                            <span class="text-white small fw-medium d-none d-sm-inline">@context.User.Identity?.Name</span>
+                            <RadzenGravatar Email="@context.User.Identity?.Name" Style="width: 2.2em; height: 2.2em; border-radius: 50%;" />
+                            <a href="/logout" class="btn btn-outline-light btn-sm ms-1" style="border-radius: 0.45em; font-size: 0.8em; padding: 0.3em 0.6em;">
+                                Esci
+                            </a>
+                        </div>
                     </Authorized>
-                    <NotAuthorized>
-                        <a href="/Account/Login">Accedi</a>
-                    </NotAuthorized>
                 </AuthorizeView>
             </div>
         </div>
-    </RadzenHeader>
+    </header>
 
-    <!-- SIDE PANEL -->
-    <RadzenSidebar @bind-Expanded="@sidebarExpanded">
-        <RadzenPanelMenu>
-            <!-- MACRO AREA: Menu -->
-            <div class="p-2 text-muted" style="font-size: 0.8rem; text-transform: uppercase;">Menu</div>
-            <RadzenPanelMenuItem Text="Feed" Path="/" Icon="home" />
-            <RadzenPanelMenuItem Text="Subscriptions" Path="/subscriptions" Icon="people" />
+    <!-- CORPO PRINCIPALE -->
+    <div class="container-fluid d-flex flex-grow-1 px-0 position-relative">
+        
+        <!-- BACKDROP MOBILE (Sfondo oscurato su smartphone) -->
+        @if (sidebarOpenMobile)
+        {
+            <div class="sidebar-backdrop d-md-none" @onclick="CloseSidebarMobile" aria-hidden="true"></div>
+        }
 
-            <!-- MACRO AREA: Personal Area -->
-            <div class="p-2 mt-3 text-muted" style="font-size: 0.8rem; text-transform: uppercase;">Personal Area</div>
-            <RadzenPanelMenuItem Text="Profile" Path="/profile" Icon="person" />
-            <RadzenPanelMenuItem Text="Saved Posts" Path="/saved" Icon="bookmark" />
-
-            <!-- MACRO AREA: History -->
-            <div class="p-2 mt-3 text-muted" style="font-size: 0.8rem; text-transform: uppercase;">History</div>
-            <RadzenPanelMenuItem Text="Ultime letture" Icon="history">
-                <RadzenPanelMenuItem Text="14:30 - Come usare Blazor" Path="/post/1" />
-                <RadzenPanelMenuItem Text="11:15 - Update HR 2026" Path="/post/2" />
-                <RadzenPanelMenuItem Text="Vedi tutta la cronologia" Path="/history" Icon="open_in_new" />
-            </RadzenPanelMenuItem>
-            
-            <!-- MACRO AREA: Trending -->
-            <div class="p-2 mt-3 text-muted" style="font-size: 0.8rem; text-transform: uppercase;">Trending</div>
-            <div class="p-2">
-                <div><RadzenBadge BadgeStyle="BadgeStyle.Primary" Text="1" /> #policy-smartworking</div>
-                <div class="mt-2"><RadzenBadge BadgeStyle="BadgeStyle.Secondary" Text="2" /> #team-building</div>
+        <!-- SIDEBAR -->
+        <aside class="sidebar bg-white border-end @(sidebarOpenMobile ? "show-mobile" : "") @(sidebarOpenDesktop ? "show-desktop" : "hide-desktop")" 
+               aria-label="Menu laterale">
+            <div class="sidebar-inner" @onclick="CloseSidebarOnNavClick">
+                <NavMenu />
             </div>
-        </RadzenPanelMenu>
-    </RadzenSidebar>
+        </aside>
 
-    <!-- CORPO CENTRALE -->
-    <RadzenBody>
-        <div class="p-4">
+        <!-- AREA CONTENUTO PRINCIPALE -->
+        <main class="flex-grow-1 p-3 p-md-4 p-xl-5 main-content" role="main">
             @Body
-        </div>
-    </RadzenBody>
-
-</RadzenLayout>
+        </main>
+    </div>
+</div>
 
 @code {
-    private bool sidebarExpanded = true;
+    private bool sidebarOpenDesktop = true;
+    private bool sidebarOpenMobile = false;
+
+    private void ToggleSidebar()
+    {
+        sidebarOpenMobile = !sidebarOpenMobile;
+        sidebarOpenDesktop = !sidebarOpenDesktop;
+    }
+
+    private void CloseSidebarMobile()
+    {
+        sidebarOpenMobile = false;
+    }
+
+    private void CloseSidebarOnNavClick()
+    {
+        if (sidebarOpenMobile)
+        {
+            sidebarOpenMobile = false;
+        }
+    }
 }
