@@ -1,0 +1,172 @@
+/* ==========================================================================
+   POSTIN - ADMIN THEME & SHARED COMPONENT STYLES
+   ========================================================================== */
+
+:root {
+    --brand-primary: #4f46e5;
+    --brand-primary-hover: #4338ca;
+    --brand-primary-light: #e0e7ff;
+    --brand-danger: #dc2626;
+    --brand-danger-bg: #fef2f2;
+    --brand-danger-border: #fecaca;
+    --border-subtle: #e2e8f0;
+    --bg-light-hover: #f8fafc;
+    --text-dark: #1e293b;
+    --text-muted: #64748b;
+    --radius-md: 0.55rem;
+    --radius-lg: 0.85rem;
+}
+
+/*  Sticky Utilities  */
+.sticky-card {
+    position: sticky;
+    top: 5.5em;
+    z-index: 10;
+}
+
+/*  Badges & Header Indicators  */
+.count-badge-header {
+    background-color: #f8fafc;
+    color: #475569;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+}
+
+.admin-count-badge {
+    background: var(--brand-danger-bg);
+    color: var(--brand-danger);
+    border: 1px solid var(--brand-danger-border);
+    border-radius: var(--radius-md);
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+}
+
+.category-badge {
+    background-color: #f1f5f9;
+    color: var(--brand-primary-hover);
+    border: 1px solid var(--border-subtle);
+    border-radius: 0.45rem;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/*  Admin Sub-Navigation Tabs  */
+.admin-nav-btn {
+    border-radius: var(--radius-md) !important;
+    transition: all 0.15s ease;
+}
+
+.admin-nav-active {
+    background-color: var(--brand-primary) !important;
+    color: #ffffff !important;
+    border: 1px solid var(--brand-primary) !important;
+    box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+}
+
+.admin-nav-inactive {
+    background-color: #ffffff !important;
+    color: #475569 !important;
+    border: 1px solid var(--border-subtle) !important;
+}
+
+.admin-nav-inactive:hover {
+    background-color: #f1f5f9 !important;
+    color: var(--text-dark) !important;
+}
+
+/*  Form Inputs  */
+.modern-input:focus {
+    background-color: #ffffff !important;
+    box-shadow: none !important;
+    border-color: #818cf8 !important;
+}
+
+/*  Interactive Links  */
+.admin-post-link:hover,
+.admin-comment-link:hover {
+    color: var(--brand-primary) !important;
+}
+
+/*  Thumbnails  */
+.grid-thumb {
+    width: 3em;
+    height: 2.4em;
+    object-fit: cover;
+    border-radius: 0.45em;
+    border: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+}
+
+.grid-thumb-placeholder {
+    width: 3em;
+    height: 2.4em;
+    border-radius: 0.45em;
+    border: 1px solid var(--border-subtle);
+    background: #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/*  RadzenDataGrid Clean Bootstrap Theme Override  */
+.rz-admin-grid .rz-grid-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+
+.rz-admin-grid .rz-grid-table thead th {
+    background: var(--bg-light-hover) !important;
+    color: var(--text-muted) !important;
+    font-size: 0.73em !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.75em 0.9em !important;
+    border-bottom: 1px solid var(--border-subtle) !important;
+    white-space: nowrap;
+}
+
+.rz-admin-grid .rz-grid-table tbody td {
+    padding: 0.6em 0.9em !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    vertical-align: middle !important;
+    color: var(--text-dark);
+}
+
+.rz-admin-grid .rz-grid-table tbody tr:hover td {
+    background: var(--bg-light-hover) !important;
+}
+
+.rz-admin-grid .rz-grid-table tbody tr:last-child td {
+    border-bottom: none !important;
+}
+
+.rz-admin-grid .rz-pager {
+    border-top: 1px solid var(--border-subtle) !important;
+    background: #ffffff !important;
+    padding: 0.5em 1em !important;
+    font-size: 0.82em;
+    color: var(--text-muted);
+}
+
+.rz-admin-grid .rz-pager .rz-paginator-element {
+    border-radius: 0.4em !important;
+}
+
+.rz-admin-grid .rz-filter-row td {
+    background: var(--bg-light-hover) !important;
+    padding: 0.4em 0.6em !important;
+    border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+.rz-admin-grid .rz-filter-row input,
+.rz-admin-grid .rz-filter-row select {
+    font-size: 0.82em !important;
+    border-radius: 0.4em !important;
+}

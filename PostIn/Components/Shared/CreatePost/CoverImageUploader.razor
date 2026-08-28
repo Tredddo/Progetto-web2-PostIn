@@ -3,10 +3,10 @@
 @using Radzen.Blazor
 @inject NotificationService NotificationService
 
-<div class="card border-0 shadow-sm p-4 mb-3" style="border-radius: 1.1rem;">
+<div class="card border-0 shadow-sm p-4 mb-3" style="border-radius: 1.1rem; border: 1px solid #e2e8f0; background: #ffffff;">
     <div class="d-flex align-items-center justify-content-between mb-2">
         <label class="form-label fw-bold text-dark mb-0 d-flex align-items-center gap-1.5">
-            <RadzenIcon Icon="image" Style="font-size: 1.15em; color: #6366f1;" />
+            <RadzenIcon Icon="image" Style="font-size: 1.15em; color: #4f46e5;" />
             Immagine di Copertina
             <span class="text-muted fw-normal small">(opzionale)</span>
         </label>
@@ -28,9 +28,11 @@
     </p>
 
     <div class="mb-2">
-        <InputFile id="coverFileInput" 
+        <!-- @key forza il reset del file input nel browser quando il file non è valido -->
+        <InputFile @key="inputFileId"
+                   id="coverFileInput" 
                    OnChange="HandleFileSelected" 
-                   accept=".jpg,.jpeg,.png,.webp" 
+                   accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                    class="form-control modern-input" 
                    disabled="@IsProcessing" />
     </div>
@@ -43,7 +45,7 @@
         </div>
     }
 
-    <!-- Anteprima Immagine (Base64 o URL esistente) -->
+    <!-- Anteprima Immagine -->
     @if (!string.IsNullOrWhiteSpace(PreviewUrl))
     {
         <div class="mt-3 position-relative rounded-3 overflow-hidden border shadow-sm" style="max-height: 14em;">
@@ -67,36 +69,48 @@
     [Parameter] public EventCallback<ImageData?> OnImageChanged { get; set; }
 
     private bool IsProcessing = false;
+    private Guid inputFileId = Guid.NewGuid(); // Chiave per resettare il campo HTML
     private const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
     private readonly string[] PermittedExtensions = { ".jpg", ".jpeg", ".png", ".webp" };
+    private readonly string[] PermittedMimeTypes = { "image/jpeg", "image/png", "image/webp" };
 
     private async Task HandleFileSelected(InputFileChangeEventArgs e)
     {
         var file = e.File;
         if (file == null) return;
 
-        // Controllo Estensione
         var extension = Path.GetExtension(file.Name).ToLowerInvariant();
-        if (string.IsNullOrEmpty(extension) || !PermittedExtensions.Contains(extension))
+        var mimeType = file.ContentType.ToLowerInvariant();
+
+        // 1. Controllo Estensione e MIME Type
+        if (string.IsNullOrEmpty(extension) || 
+            !PermittedExtensions.Contains(extension) || 
+            !PermittedMimeTypes.Contains(mimeType))
         {
+            ResetInputFile();
+            await OnImageChanged.InvokeAsync(null);
+
             NotificationService.Notify(new NotificationMessage
             {
-                Severity = NotificationSeverity.Warning,
-                Summary = "Formato non valido",
-                Detail = "Sono consentiti solo file di tipo JPG, PNG o WEBP.",
-                Duration = 3500
+                Severity = NotificationSeverity.Error,
+                Summary = "File non supportato",
+                Detail = $"Il file '{file.Name}' non è un'immagine valida. Seleziona un file JPG, PNG o WEBP.",
+                Duration = 4000
             });
             return;
         }
 
-        // Controllo Dimensione
+        // 2. Controllo Dimensione
         if (file.Size > MaxFileSize)
         {
+            ResetInputFile();
+            await OnImageChanged.InvokeAsync(null);
+
             NotificationService.Notify(new NotificationMessage
             {
                 Severity = NotificationSeverity.Warning,
                 Summary = "File troppo grande",
-                Detail = "L'immagine supera la dimensione massima consentita di 5 MB.",
+                Detail = "L'immagine supera il limite massimo di 5 MB.",
                 Duration = 3500
             });
             return;
@@ -106,13 +120,11 @@
 
         try
         {
-            // Lettura dei byte in memoria (senza scrivere sul disco)
             await using var stream = file.OpenReadStream(maxAllowedSize: MaxFileSize);
             using var memoryStream = new MemoryStream();
             await stream.CopyToAsync(memoryStream);
             var fileBytes = memoryStream.ToArray();
 
-            // Creazione stringa Base64 per anteprima immediata nel browser
             var base64Preview = $"data:{file.ContentType};base64,{Convert.ToBase64String(fileBytes)}";
 
             var data = new ImageData
@@ -126,10 +138,13 @@
         }
         catch (Exception ex)
         {
+            ResetInputFile();
+            await OnImageChanged.InvokeAsync(null);
+
             NotificationService.Notify(new NotificationMessage
             {
                 Severity = NotificationSeverity.Error,
-                Summary = "Errore Lettura Immagine",
+                Summary = "Errore Lettura",
                 Detail = ex.Message,
                 Duration = 4000
             });
@@ -142,6 +157,13 @@
 
     private async Task RimuoviImmagine()
     {
+        ResetInputFile();
         await OnImageChanged.InvokeAsync(null);
+    }
+
+    private void ResetInputFile()
+    {
+        // Cambiando il GUID, Blazor ricrea il nodo DOM <input type="file"> pulendolo
+        inputFileId = Guid.NewGuid();
     }
 }

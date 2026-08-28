@@ -1,6 +1,7 @@
 @page "/create-post"
 @page "/edit-post/{Id:int}"
 @rendermode InteractiveServer
+@attribute [Authorize]
 @using Microsoft.EntityFrameworkCore
 @using System.Security.Claims
 @using System.ComponentModel.DataAnnotations
@@ -91,7 +92,7 @@
                         <!-- 1. Titolo -->
                         <div class="card border-0 shadow-sm p-4 mb-3" style="border-radius: 1.1rem;">
                             <label for="titolo" class="form-label fw-bold text-dark mb-1">
-                                Titolo dell Post <span class="text-danger">*</span>
+                                Titolo del Post <span class="text-danger">*</span>
                             </label>
                             <p class="text-muted small mb-2">Scegli un titolo chiaro e accattivante per i tuoi colleghi.</p>
                             
@@ -115,7 +116,7 @@
                         <div class="card border-0 shadow-sm p-4 mb-3" style="border-radius: 1.1rem;">
                             <div class="d-flex align-items-center justify-content-between mb-1">
                                 <label for="corpo" class="form-label fw-bold text-dark mb-0">
-                                    Contenuto dell Post <span class="text-danger">*</span>
+                                    Contenuto del Post <span class="text-danger">*</span>
                                 </label>
                             </div>
 

@@ -11,17 +11,19 @@
     <link rel="stylesheet" href="_content/Radzen.Blazor/css/material-base.css">
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
+
+    <!-- Stile Tabelle Admin -->
+    <link rel="stylesheet" href="css/admin-theme.css" />
+
     <HeadOutlet />
 </head>
 
-<script>
-    window.toggleAppSidebar = function () {
-        document.body.classList.toggle('sidebar-collapsed');
-    };
-</script>
-
 <body>
     <Routes  />
+
+    <!-- Custom sidebar -->
+    <script src="@Assets["js/sidebar.js"]"></script>
+
     <script src="_framework/blazor.web.js"></script>
     <script src="_content/Radzen.Blazor/Radzen.Blazor.js"></script>
 </body>

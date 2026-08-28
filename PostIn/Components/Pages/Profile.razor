@@ -1,6 +1,6 @@
 @page "/profile"
 @rendermode InteractiveServer
-@implements IAsyncDisposable
+@attribute [Authorize]
 @using Microsoft.EntityFrameworkCore
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Components.Authorization
@@ -13,18 +13,21 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
+@inject DialogService DialogService
 @inject IWebHostEnvironment Environment
 
 <RadzenNotification />
+<RadzenDialog />
 
 <PageTitle>Il Mio Profilo - PostIn</PageTitle>
 
-<div class="mx-auto" style="max-width:52em;">
+<div class="mx-auto" style="max-width: 52em;">
 
     @if (isLoading)
     {
         <div class="text-center py-5">
             <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
+            <p class="text-muted small mt-2">Caricamento profilo...</p>
         </div>
     }
     else if (dipendente == null)
@@ -33,11 +36,15 @@
     }
     else
     {
-        <!-- Header Profilo -->
+        <!-- 1. Header Profilo -->
         <ProfileHero Dipendente="dipendente"
                      FollowingCount="followingCount"
                      FollowersCount="followersCount" />
 
+        <!-- 2. Box Gestione Sicurezza / Cambio Password -->
+        <ChangePasswordCard UserId="currentUserId" />
+
+        <!-- 3. Contenuti e Preferenze -->
         <div class="row g-4">
             <!-- Colonna Sinistra: Categorie Preferite & Attività -->
             <div class="col-md-5">
@@ -60,41 +67,6 @@
     }
 </div>
 
-<!-- NOTIFICA CON TASTO ANNULLA (UNDO PATTERN) -->
-@if (mostraNotificaAnnulla && articoloInCancellazione != null)
-{
-    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1090;">
-        <div class="card border-0 shadow-lg bg-dark text-white p-3 d-flex flex-row align-items-center gap-3" 
-             style="border-radius: 1rem; min-width: 22em; border: 1px solid rgba(255,255,255,0.15) !important;">
-            
-            <div class="d-flex align-items-center gap-2 flex-grow-1 min-w-0">
-                <RadzenIcon Icon="delete" Style="color: #f87171; font-size: 1.3em;" class="flex-shrink-0" />
-                <div class="min-w-0">
-                    <div class="fw-semibold text-truncate small">Articolo rimosso</div>
-                    <div class="text-white-50 text-truncate" style="font-size: 0.75rem;">
-                        @articoloInCancellazione.Titolo
-                    </div>
-                </div>
-            </div>
-
-            <div class="d-flex align-items-center gap-1.5 flex-shrink-0">
-                <button type="button" 
-                        class="btn btn-warning btn-sm fw-bold px-3 py-1 d-flex align-items-center gap-1 rounded-pill"
-                        style="font-size: 0.8rem;"
-                        @onclick="AnnullaEliminazione">
-                    <RadzenIcon Icon="undo" Style="font-size: 0.95em;" />
-                    Annulla
-                </button>
-                <button type="button" 
-                        class="btn-close btn-close-white p-1.5" 
-                        style="font-size: 0.65rem;"
-                        aria-label="Elimina definitivamente" 
-                        @onclick="ConfermaEliminazioneImmediata"></button>
-            </div>
-        </div>
-    </div>
-}
-
 @code {
     private bool isLoading = true;
     private bool isActionLoading = false;
@@ -106,16 +78,10 @@
     private int followersCount = 0;
     private DateTime? ultimoAccesso;
     private string preferitiMessage = string.Empty;
-
-    // Gestione Undo / Eliminazione Differita
-    private Articolo? articoloInCancellazione;
-    private bool mostraNotificaAnnulla = false;
-    private CancellationTokenSource? deleteCts;
+    private bool isUpdatingCategory = false;
 
     private ICollection<Articolo> ArticoliVisibili =>
-        dipendente?.Articoliscritti
-            .Where(a => articoloInCancellazione == null || a.ID_Articolo != articoloInCancellazione.ID_Articolo)
-            .ToList() ?? new List<Articolo>();
+        dipendente?.Articoliscritti.OrderByDescending(a => a.DataOraCreazione).ToList() ?? new List<Articolo>();
 
     protected override async Task OnInitializedAsync()
     {
@@ -137,7 +103,6 @@
 
             if (dipendente != null)
             {
-                // Assegna il timestamp aggiornato al login
                 ultimoAccesso = dipendente.UltimoAccesso;
 
                 categoriePreferiteIds = (await DbContext.CategoriePreferite
@@ -157,8 +122,6 @@
             isLoading = false;
         }
     }
-
-    private bool isUpdatingCategory = false;
 
     private async Task ToggleCategoriaPreferita(int categoriaId)
     {
@@ -229,85 +192,31 @@
         }
     }
 
-    #region Gestione Eliminazione Post & File con Undo
+    #region Gestione Eliminazione Post con Radzen Dialog
 
     private async Task RichiediEliminazioneArticolo(int articoloId)
     {
-        if (articoloInCancellazione != null)
-        {
-            await EseguiCancellazioneEffettiva(articoloInCancellazione.ID_Articolo);
-        }
-
         var post = dipendente?.Articoliscritti.FirstOrDefault(a => a.ID_Articolo == articoloId);
         if (post == null) return;
 
-        articoloInCancellazione = post;
-        mostraNotificaAnnulla = true;
-        deleteCts?.Cancel();
-        deleteCts = new CancellationTokenSource();
-
-        StateHasChanged();
-
-        _ = Task.Run(async () =>
-        {
-            try
+        // Apertura del modale di conferma nativo Radzen
+        bool? confermato = await DialogService.Confirm(
+            $"Sei sicuro di voler eliminare definitivamente l'articolo \"{post.Titolo}\"? Tutti i commenti, visualizzazioni e like associati verranno rimossi in modo permanente.",
+            "Conferma Eliminazione Articolo",
+            new ConfirmOptions
             {
-                await Task.Delay(5000, deleteCts.Token);
+                OkButtonText = "Elimina Definitivamente",
+                CancelButtonText = "Annulla",
+                AutoFocusFirstElement = false
+            });
 
-                await InvokeAsync(async () =>
-                {
-                    if (articoloInCancellazione != null && !deleteCts.IsCancellationRequested)
-                    {
-                        var idDaEliminare = articoloInCancellazione.ID_Articolo;
-                        mostraNotificaAnnulla = false;
-                        articoloInCancellazione = null;
-                        await EseguiCancellazioneEffettiva(idDaEliminare);
-                    }
-                });
-            }
-            catch (TaskCanceledException)
-            {
-            }
-        });
-    }
-
-    private void AnnullaEliminazione()
-    {
-        if (deleteCts != null && !deleteCts.IsCancellationRequested)
+        if (confermato == true)
         {
-            deleteCts.Cancel();
-        }
-
-        articoloInCancellazione = null;
-        mostraNotificaAnnulla = false;
-        StateHasChanged();
-
-        NotificationService.Notify(new NotificationMessage
-        {
-            Severity = NotificationSeverity.Info,
-            Summary = "Operazione Annullata",
-            Detail = "L'articolo non è stato eliminato.",
-            Duration = 2500
-        });
-    }
-
-    private async Task ConfermaEliminazioneImmediata()
-    {
-        if (deleteCts != null && !deleteCts.IsCancellationRequested)
-        {
-            deleteCts.Cancel();
-        }
-
-        if (articoloInCancellazione != null)
-        {
-            var idDaEliminare = articoloInCancellazione.ID_Articolo;
-            mostraNotificaAnnulla = false;
-            articoloInCancellazione = null;
-            await EseguiCancellazioneEffettiva(idDaEliminare);
+            await EseguiCancellazioneEffettiva(articoloId, post.Titolo);
         }
     }
 
-    private async Task EseguiCancellazioneEffettiva(int articoloId)
+    private async Task EseguiCancellazioneEffettiva(int articoloId, string titolo)
     {
         isActionLoading = true;
         StateHasChanged();
@@ -319,7 +228,7 @@
 
             if (articolo != null)
             {
-                // Cancellazione fisica del file dalla cartella protetta Uploads/Covers
+                // Rimozione del file copertina da disco protetto
                 if (!string.IsNullOrWhiteSpace(articolo.ImmagineCopertina) &&
                     articolo.ImmagineCopertina.StartsWith("/uploads/covers/"))
                 {
@@ -338,7 +247,7 @@
                     }
                 }
 
-                // Pulizia dipendenze
+                // Pulizia tabelle collegate
                 var artCategorie = DbContext.ArticoloCategorie.Where(ac => ac.FK_Articolo == articoloId);
                 var commenti = DbContext.Commenti.Where(c => c.FK_Articolo == articoloId);
                 var likes = DbContext.Likes.Where(l => l.FK_Articolo == articoloId);
@@ -353,6 +262,14 @@
 
                 DbContext.Articoli.Remove(articolo);
                 await DbContext.SaveChangesAsync();
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Articolo Eliminato",
+                    Detail = $"L'articolo \"{titolo}\" è stato rimosso con successo.",
+                    Duration = 3000
+                });
 
                 await CaricaProfilo();
             }
@@ -374,16 +291,6 @@
             isActionLoading = false;
             StateHasChanged();
         }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (articoloInCancellazione != null)
-        {
-            deleteCts?.Cancel();
-            await EseguiCancellazioneEffettiva(articoloInCancellazione.ID_Articolo);
-        }
-        deleteCts?.Dispose();
     }
 
     #endregion

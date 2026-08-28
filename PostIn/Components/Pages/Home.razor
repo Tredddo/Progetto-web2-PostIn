@@ -80,79 +80,83 @@
         </span>
     </RadzenCard>
 
-    <!-- CARICAMENTO / EMPTY STATE / LISTA POST -->
-    @if (isLoading)
-    {
-        <div class="text-center py-5">
-            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
-            <p class="text-muted small mt-2">Aggiornamento del feed in corso...</p>
-        </div>
-    }
-    else if (!ArticoliVisualizzati.Any())
-    {
-        <RadzenCard class="rz-shadow-sm p-5 text-center" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
-            @if (filtroSelezionato == TipoFiltro.Preferiti)
-            {
-                <RadzenIcon Icon="label_off" Style="font-size: 3em; color: #94a3b8;" class="mb-3 d-block" />
-                <h2 class="h5 fw-bold text-dark mb-1">Nessun articolo per i tuoi argomenti</h2>
-                <p class="text-muted small mb-3">Non ci sono post nelle categorie che hai impostato come preferite.</p>
-                <div>
-                    <RadzenButton Icon="tune"
-                                  Text="Configura preferenze nel profilo"
-                                  Variant="Variant.Outlined"
-                                  ButtonStyle="ButtonStyle.Primary"
-                                  Size="ButtonSize.Small"
-                                  Style="border-radius: 0.55rem;"
-                                  Click='() => NavigationManager.NavigateTo("/profile")' />
-                </div>
-            }
-            else if (filtroSelezionato == TipoFiltro.Seguiti)
-            {
-                <RadzenIcon Icon="person_search" Style="font-size: 3em; color: #94a3b8;" class="mb-3 d-block" />
-                <h2 class="h5 fw-bold text-dark mb-1">Nessun articolo dai colleghi seguiti</h2>
-                <p class="text-muted small mb-3">I colleghi che segui non hanno ancora pubblicato contenuti.</p>
-                <div>
-                    <RadzenButton Icon="group_add"
-                                  Text="Esplora colleghi nella rete aziendale"
-                                  Variant="Variant.Outlined"
-                                  ButtonStyle="ButtonStyle.Primary"
-                                  Size="ButtonSize.Small"
-                                  Style="border-radius: 0.55rem;"
-                                  Click='() => NavigationManager.NavigateTo("/subscriptions")' />
-                </div>
-            }
-            else
-            {
-                <RadzenIcon Icon="article" Style="font-size: 3em; color: #94a3b8;" class="mb-3 d-block" />
-                <h2 class="h5 fw-bold text-dark mb-1">Nessun post disponibile</h2>
-                <p class="text-muted small mb-3">Inizia tu la conversazione pubblicando il primo articolo aziendale!</p>
-                <div>
-                    <RadzenButton Icon="edit"
-                                  Text="Scrivi il primo post"
-                                  ButtonStyle="ButtonStyle.Primary"
-                                  Size="ButtonSize.Small"
-                                  Style="background-color: #4f46e5; border-radius: 0.55rem;"
-                                  Click='() => NavigationManager.NavigateTo("/create-post")' />
-                </div>
-            }
-        </RadzenCard>
-    }
-    else
-    {
-        <div class="d-flex flex-column gap-2 mb-5">
-            @foreach (var post in ArticoliVisualizzati)
-            {
+    <GenericList TItem="Articolo"
+                Items="@ArticoliVisualizzati"
+                IsLoading="@isLoading"
+                ContainerClass="d-flex flex-column gap-2 mb-5">
+
+        <!-- TEMPLATE DI CARICAMENTO -->
+        <LoadingTemplate>
+            <div class="text-center py-5">
+                <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
+                <p class="text-muted small mt-2">Aggiornamento del feed in corso...</p>
+            </div>
+        </LoadingTemplate>
+
+        <!-- TEMPLATE STATO VUOTO (CONDIZIONALE PER FILTRI) -->
+        <EmptyTemplate>
+            <RadzenCard class="rz-shadow-sm p-5 text-center" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+                @if (filtroSelezionato == TipoFiltro.Preferiti)
+                {
+                    <RadzenIcon Icon="label_off" Style="font-size: 3em; color: #94a3b8;" class="mb-3 d-block" />
+                    <h2 class="h5 fw-bold text-dark mb-1">Nessun articolo per i tuoi argomenti</h2>
+                    <p class="text-muted small mb-3">Non ci sono post nelle categorie che hai impostato come preferite.</p>
+                    <div>
+                        <RadzenButton Icon="tune"
+                                    Text="Configura preferenze nel profilo"
+                                    Variant="Variant.Outlined"
+                                    ButtonStyle="ButtonStyle.Primary"
+                                    Size="ButtonSize.Small"
+                                    Style="border-radius: 0.55rem;"
+                                    Click='() => NavigationManager.NavigateTo("/profile")' />
+                    </div>
+                }
+                else if (filtroSelezionato == TipoFiltro.Seguiti)
+                {
+                    <RadzenIcon Icon="person_search" Style="font-size: 3em; color: #94a3b8;" class="mb-3 d-block" />
+                    <h2 class="h5 fw-bold text-dark mb-1">Nessun articolo dai colleghi seguiti</h2>
+                    <p class="text-muted small mb-3">I colleghi che segui non hanno ancora pubblicato contenuti.</p>
+                    <div>
+                        <RadzenButton Icon="group_add"
+                                    Text="Esplora colleghi nella rete aziendale"
+                                    Variant="Variant.Outlined"
+                                    ButtonStyle="ButtonStyle.Primary"
+                                    Size="ButtonSize.Small"
+                                    Style="border-radius: 0.55rem;"
+                                    Click='() => NavigationManager.NavigateTo("/subscriptions")' />
+                    </div>
+                }
+                else
+                {
+                    <RadzenIcon Icon="article" Style="font-size: 3em; color: #94a3b8;" class="mb-3 d-block" />
+                    <h2 class="h5 fw-bold text-dark mb-1">Nessun post disponibile</h2>
+                    <p class="text-muted small mb-3">Inizia tu la conversazione pubblicando il primo articolo aziendale!</p>
+                    <div>
+                        <RadzenButton Icon="edit"
+                                    Text="Scrivi il primo post"
+                                    ButtonStyle="ButtonStyle.Primary"
+                                    Size="ButtonSize.Small"
+                                    Style="background-color: #4f46e5; border-radius: 0.55rem;"
+                                    Click='() => NavigationManager.NavigateTo("/create-post")' />
+                    </div>
+                }
+            </RadzenCard>
+        </EmptyTemplate>
+
+        <!-- TEMPLATE SINGOLO ELEMENTO (Tipizzato come Articolo) -->
+        <ItemTemplate Context="post">
+            @{
                 var isSaved = salvatiIds.Contains(post.ID_Articolo);
                 var isLiked = post.Likes.Any(d => d.ID_Dipendente == currentUserId);
-
-                <PostCard Post="@post" 
-                          IsBookmarked="@isSaved"
-                          IsLiked="@isLiked"
-                          OnLike="HandleLike" 
-                          OnBookmark="HandleBookmark" />
             }
-        </div>
-    }
+            <PostCard Post="@post" 
+                    IsBookmarked="@isSaved"
+                    IsLiked="@isLiked"
+                    OnLike="HandleLike" 
+                    OnBookmark="HandleBookmark" />
+        </ItemTemplate>
+
+    </GenericList>
 </div>
 
 <style>

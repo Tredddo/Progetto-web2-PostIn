@@ -1,44 +1,41 @@
-using PostIn.Components;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.EntityFrameworkCore;
+using PostIn.Components;
 using PostIn.Data;
-using PostIn.Data.Entities;
+using PostIn.Endpoints;
 using Radzen;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// Servizi Blazor e Radzen
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<DialogService>();
 
-// DB Connection
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=postin.db";
-
+// Connessione Database (SQLite)
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
+                       ?? "Data Source=postin.db";
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite(connectionString));
 
-// Enable notifications
-builder.Services.AddScoped<NotificationService>();
-
-// Auth handler
+// Autenticazione e Autorizzazione (Cookie)
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddAuthorizationCore();
-
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
 })
 .AddCookie(options =>
 {
-    options.LogoutPath = "/logout";
     options.LoginPath = "/login";
+    options.LogoutPath = "/logout";
     options.AccessDeniedPath = "/AccessDenied";
 });
 
-
 var app = builder.Build();
 
+// Migrazione automatica e Seeding iniziale del DB
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -46,47 +43,20 @@ using (var scope = app.Services.CreateScope())
     await DbSeeder.SeedAsync(dbContext);
 }
 
-// Configure the HTTP request pipeline.
+// Pipeline HTTP
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
+    app.UseHttpsRedirection(); // Solo in produzione per evitare warning locali
 }
 
-app.UseHttpsRedirection();
-
-// Force auth redirect
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.UseAntiforgery();
 
-// 7. Endpoint Protetto per il Download delle Copertine
-app.MapGet("/uploads/covers/{fileName}", (string fileName, IWebHostEnvironment env) =>
-{
-    // Sanificazione del nome file per impedire navigazione arbitraria nel disco
-    var safeFileName = Path.GetFileName(fileName);
-    var filePath = Path.Combine(env.ContentRootPath, "Uploads", "Covers", safeFileName);
-
-    if (!File.Exists(filePath))
-    {
-        return Results.NotFound();
-    }
-
-    var extension = Path.GetExtension(safeFileName).ToLowerInvariant();
-    var contentType = extension switch
-    {
-        ".jpg" or ".jpeg" => "image/jpeg",
-        ".png" => "image/png",
-        ".webp" => "image/webp",
-        _ => "application/octet-stream"
-    };
-
-    return Results.File(filePath, contentType);
-}).RequireAuthorization(); // Blocca le richieste anonime reindirizzando al Login
-
-
+// Registrazione Endpoint e Componenti
+app.MapCoverEndpoints(); // Endpoint protetto
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

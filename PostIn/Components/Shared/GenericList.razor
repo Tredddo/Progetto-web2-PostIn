@@ -1,0 +1,68 @@
+@typeparam TItem
+@using Radzen
+@using Radzen.Blazor
+
+@if (IsLoading)
+{
+    @if (LoadingTemplate != null)
+    {
+        @LoadingTemplate
+    }
+    else
+    {
+        <div class="text-center py-5">
+            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
+            <p class="text-muted small mt-2">Caricamento elementi in corso...</p>
+        </div>
+    }
+}
+else if (Items == null || !Items.Any())
+{
+    @if (EmptyTemplate != null)
+    {
+        @EmptyTemplate
+    }
+    else
+    {
+        <div class="text-center py-5 text-muted bg-light rounded-3 border border-dashed my-3">
+            <RadzenIcon Icon="@(EmptyIcon ?? "inbox")" Style="font-size: 2.5em; color: #cbd5e1;" class="d-block mx-auto mb-2" />
+            <p class="mb-0 small fw-medium text-dark">@(EmptyText ?? "Nessun elemento presente.")</p>
+            @if (!string.IsNullOrEmpty(EmptySubtext))
+            {
+                <p class="small text-muted mb-0">@EmptySubtext</p>
+            }
+        </div>
+    }
+}
+else
+{
+    <div class="@ContainerClass">
+        @foreach (var item in Items)
+        {
+            @if (ItemTemplate != null)
+            {
+                @ItemTemplate(item)
+            }
+        }
+    </div>
+}
+
+@code {
+    // Collezione generica di elementi di tipo TItem
+    [Parameter] public IEnumerable<TItem>? Items { get; set; }
+
+    // Template delegato al rendering del singolo elemento TItem
+    [Parameter] public RenderFragment<TItem>? ItemTemplate { get; set; }
+
+    // Template opzionale per lo stato vuoto (se assente usa quello di default)
+    [Parameter] public RenderFragment? EmptyTemplate { get; set; }
+
+    // Template opzionale per il caricamento
+    [Parameter] public RenderFragment? LoadingTemplate { get; set; }
+
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public string? EmptyText { get; set; }
+    [Parameter] public string? EmptySubtext { get; set; }
+    [Parameter] public string? EmptyIcon { get; set; }
+    [Parameter] public string ContainerClass { get; set; } = "d-flex flex-column gap-3";
+}

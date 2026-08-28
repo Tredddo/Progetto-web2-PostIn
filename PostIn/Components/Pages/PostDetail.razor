@@ -14,6 +14,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
+@inject IJSRuntime JSRuntime
 
 <PageTitle>@(articolo?.Titolo ?? "Caricamento Articolo") - PostIn</PageTitle>
 
@@ -296,14 +297,63 @@ else
     private int likeCount = 0;
     private string nuovoCommento = string.Empty;
 
+    private int _lastLoadedId = 0;
+    private bool _scrollToComments = false;
+    private bool _shouldScrollToTop = false;
+
+    // INIZIALIZZAZIONE (Eseguito 1 sola volta all'apertura del componente)
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var userIdClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         int.TryParse(userIdClaim, out currentUserId);
+    }
 
-        await CaricaArticolo();
-        await RegistraVisualizzazione();
+    // GESTIONE PARAMETRI (Eseguito all'avvio e ad ogni cambio di rotte es. da /post/1 a /post/2)
+    protected override async Task OnParametersSetAsync()
+    {
+        // Ricarica i dati solo se l'ID è effettivamente cambiato o è il primo caricamento
+        if (Id != _lastLoadedId)
+        {
+            _lastLoadedId = Id;
+            
+            // Reset stati reattivi
+            haLiked = false;
+            haSalvato = false;
+            likeCount = 0;
+            nuovoCommento = string.Empty;
+            _shouldScrollToTop = true;
+
+            await CaricaArticolo();
+            await RegistraVisualizzazione();
+        }
+    }
+
+    // POST-RENDERING DOM (Eseguito solo quando il DOM HTML è pronto)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Gestione Scroll automatico in cima quando cambia post
+        if (_shouldScrollToTop)
+        {
+            _shouldScrollToTop = false;
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("window.scrollTo", 0, 0);
+            }
+            catch { /* Ignora se JS non disponibile */ }
+        }
+
+        // Gestione Scroll verso i commenti appena pubblicati
+        if (_scrollToComments)
+        {
+            _scrollToComments = false;
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("eval", 
+                    "document.getElementById('commenti-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' });");
+            }
+            catch { /* Ignora se elemento assente */ }
+        }
     }
 
     private async Task CaricaArticolo()
@@ -318,6 +368,7 @@ else
                 .Include(a => a.Commenti).ThenInclude(c => c.Autore)
                 .Include(a => a.Visualizzazioni)
                 .Include(a => a.Likes)
+                .AsSplitQuery()
                 .FirstOrDefaultAsync(a => a.ID_Articolo == Id);
 
             if (articolo != null && currentUserId > 0)
@@ -357,7 +408,7 @@ else
             });
             await DbContext.SaveChangesAsync();
         }
-        catch { /* Ignoro errori in caso di inserimento rapido multiplo */ }
+        catch { /* Ignora duplicazioni da double-click rapido */ }
     }
 
     private async Task ToggleLike()
@@ -389,7 +440,6 @@ else
             }
             
             await DbContext.SaveChangesAsync();
-            StateHasChanged();
         }
         catch (Exception ex)
         {
@@ -450,7 +500,6 @@ else
             }
             
             await DbContext.SaveChangesAsync();
-            StateHasChanged();
         }
         catch (Exception ex)
         {
@@ -486,7 +535,8 @@ else
             await DbContext.SaveChangesAsync();
             
             nuovoCommento = string.Empty;
-            
+            _scrollToComments = true; // Notifica a OnAfterRenderAsync di scorrere ai commenti
+
             NotificationService.Notify(new NotificationMessage
             {
                 Severity = NotificationSeverity.Success,
@@ -495,8 +545,7 @@ else
                 Duration = 2500
             });
 
-            await CaricaArticolo(); // Ricarica i commenti dal database
-            StateHasChanged();
+            await CaricaArticolo();
         }
         catch (Exception ex)
         {

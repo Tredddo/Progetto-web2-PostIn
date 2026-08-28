@@ -41,7 +41,6 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<ArticoloCategoria>().HasKey(ac => new { ac.FK_Articolo, ac.FK_Categoria });
         modelBuilder.Entity<IscrizioniFollow>().HasKey(f => new { f.FK_Follower, f.FK_Followed });
 
-        //modelBuilder.Entity<CategoriaPreferita>().HasKey(cp => new { cp.FK_Dipendente, cp.FK_Categoria });
         modelBuilder.Entity<Dipendente>()
             .HasMany(d => d.CategoriePreferite)
             .WithMany(c => c.CategoriePreferite)
@@ -51,7 +50,6 @@ public class ApplicationDbContext : DbContext
                 j => j.HasKey(cp => new { cp.FK_Dipendente, cp.FK_Categoria })
             );
 
-        //modelBuilder.Entity<SalvataggioDaLeggere>().HasKey(s => new { s.FK_Dipendente, s.FK_Articolo });
         modelBuilder.Entity<Dipendente>()
             .HasMany(d => d.ArticoliSalvati)
             .WithMany(a => a.SalvataggiDaLeggere)
@@ -61,7 +59,6 @@ public class ApplicationDbContext : DbContext
                 j => j.HasKey(s => new { s.FK_Dipendente, s.FK_Articolo })
             );
 
-        //modelBuilder.Entity<Like>().HasKey(l => new { l.FK_Dipendente, l.FK_Articolo });
         modelBuilder.Entity<Dipendente>()
             .HasMany(d => d.Likes)
             .WithMany(a => a.Likes)
@@ -96,19 +93,6 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(ac => ac.FK_Categoria)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Relazione N:N Dipendenti <-> Categorie (Preferite)
-        // modelBuilder.Entity<CategoriaPreferita>()
-        //     .HasOne(cp => cp.Dipendente)
-        //     .WithMany(d => d.CategoriePreferite)
-        //     .HasForeignKey(cp => cp.FK_Dipendente)
-        //     .OnDelete(DeleteBehavior.Cascade);
-
-        // modelBuilder.Entity<CategoriaPreferita>()
-        //     .HasOne(cp => cp.Categoria)
-        //     .WithMany(c => c.CategoriePreferite)
-        //     .HasForeignKey(cp => cp.FK_Categoria)
-        //     .OnDelete(DeleteBehavior.Cascade);
-
         // Relazione Self-Referencing N:N (Follow tra Dipendenti)
         modelBuilder.Entity<IscrizioniFollow>()
             .HasOne(f => f.Follower)
@@ -121,32 +105,6 @@ public class ApplicationDbContext : DbContext
             .WithMany(d => d.Followers)
             .HasForeignKey(f => f.FK_Followed)
             .OnDelete(DeleteBehavior.Cascade);
-
-        // Relazione N:N Dipendenti <-> Articoli (SalvataggiDaLeggere)
-        // modelBuilder.Entity<SalvataggioDaLeggere>()
-        //     .HasOne(s => s.Dipendente)
-        //     .WithMany(d => d.SalvataggiDaLeggere)
-        //     .HasForeignKey(s => s.FK_Dipendente)
-        //     .OnDelete(DeleteBehavior.Cascade);
-
-        // modelBuilder.Entity<SalvataggioDaLeggere>()
-        //     .HasOne(s => s.Articolo)
-        //     .WithMany(a => a.SalvataggiDaLeggere)
-        //     .HasForeignKey(s => s.FK_Articolo)
-        //     .OnDelete(DeleteBehavior.Cascade);
-
-        // Relazione N:N Dipendenti <-> Articoli (Likes)
-        // modelBuilder.Entity<Like>()
-        //     .HasOne(l => l.Dipendente)
-        //     .WithMany(d => d.Likes)
-        //     .HasForeignKey(l => l.FK_Dipendente)
-        //     .OnDelete(DeleteBehavior.Cascade);
-
-        // modelBuilder.Entity<Like>()
-        //     .HasOne(l => l.Articolo)
-        //     .WithMany(a => a.Likes)
-        //     .HasForeignKey(l => l.FK_Articolo)
-        //     .OnDelete(DeleteBehavior.Cascade);
 
         // Relazione 1:N Dipendente & Articolo -> Visualizzazioni
         modelBuilder.Entity<Visualizzazione>()
