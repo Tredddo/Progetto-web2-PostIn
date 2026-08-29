@@ -142,192 +142,247 @@
         </RadzenCard>
     }
 
-    <!-- TABELLA UTENTI -->
-    @if (isLoading)
-    {
-        <div class="text-center py-5">
-            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
-            <p class="text-muted small mt-2">Caricamento elenco dipendenti...</p>
+    <!-- PANNELLO FILTRI -->
+    <RadzenCard class="rz-shadow-sm p-3 mb-4" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+        <div class="row g-3 align-items-end">
+            <div class="col-lg-5 col-md-6">
+                <label class="form-label fw-bold small text-muted text-uppercase mb-1" style="font-size: 0.73rem; letter-spacing: 0.05em;">Cerca Dipendente</label>
+                <div class="input-group" style="border-radius: 0.55rem; overflow: hidden;">
+                    <span class="input-group-text bg-light text-muted border-end-0">
+                        <RadzenIcon Icon="search" Style="font-size: 1.1em;" />
+                    </span>
+                    <input type="text" class="form-control border-start-0 modern-input"
+                           placeholder="Cerca per nome, cognome o username..."
+                           value="@filtroTesto"
+                           @oninput="OnFiltroTestoChanged" />
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-3">
+                <label class="form-label fw-bold small text-muted text-uppercase mb-1" style="font-size: 0.73rem; letter-spacing: 0.05em;">Ruolo</label>
+                <RadzenDropDown Value="@filtroRuolo"
+                                ValueChanged="@((int? val) => OnFiltroRuoloChanged(val))"
+                                Data="@opzioniFiltroRuolo"
+                                TextProperty="Nome"
+                                ValueProperty="Valore"
+                                Placeholder="Tutti i ruoli"
+                                AllowClear="true"
+                                Class="w-100"
+                                Style="border-radius: 0.55rem;" />
+            </div>
+            <div class="col-lg-3 col-md-3">
+                <label class="form-label fw-bold small text-muted text-uppercase mb-1" style="font-size: 0.73rem; letter-spacing: 0.05em;">Stato</label>
+                <RadzenDropDown Value="@filtroStato"
+                                ValueChanged="@((int? val) => OnFiltroStatoChanged(val))"
+                                Data="@opzioniFiltroStato"
+                                TextProperty="Nome"
+                                ValueProperty="Valore"
+                                Placeholder="Tutti gli stati"
+                                AllowClear="true"
+                                Class="w-100"
+                                Style="border-radius: 0.55rem;" />
+            </div>
+            <div class="col-lg-1 col-md-12 text-end">
+                <RadzenButton Icon="filter_alt_off"
+                              Variant="Variant.Outlined"
+                              ButtonStyle="ButtonStyle.Secondary"
+                              Size="ButtonSize.Medium"
+                              Style="border-radius: 0.55rem; width: 100%;"
+                              Title="Azzera filtri"
+                              Click="ResetFiltri" />
+            </div>
         </div>
-    }
-    else
-    {
-        <RadzenCard class="rz-shadow-sm p-0 mb-5 overflow-hidden" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
-            <RadzenDataGrid Data="@dipendenti"
-                            TItem="Dipendente"
-                            AllowSorting="true"
-                            AllowFiltering="true"
-                            FilterMode="FilterMode.Advanced"
-                            FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
-                            AllowPaging="true"
-                            PageSize="10"
-                            PagerHorizontalAlign="HorizontalAlign.Right"
-                            ShowPagingSummary="true"
-                            PagingSummaryFormat="Pagina {0} di {1} ({2} utenti)"
-                            EmptyText="Nessun utente trovato."
-                            class="rz-admin-grid">
-                <Columns>
+    </RadzenCard>
 
-                    <!-- ID (Non filtrabile) -->
-                    <RadzenDataGridColumn TItem="Dipendente"
-                                         Property="ID_Dipendente"
-                                         Title="ID"
-                                         Width="80px"
-                                         Filterable="false"
-                                         TextAlign="TextAlign.Center">
-                        <Template Context="d">
-                            <span class="text-muted small fw-medium">#@d.ID_Dipendente</span>
-                        </Template>
-                    </RadzenDataGridColumn>
+    <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+        <span class="text-muted small">
+            Visualizzati <strong>@dipendentiFiltrati.Count</strong> di <strong>@dipendenti.Count</strong> utenti
+        </span>
+    </div>
 
-                    <!-- Dipendente (Avatar + Nome Cognome, Filtrabile per Cognome) -->
-                    <RadzenDataGridColumn TItem="Dipendente"
-                                         Property="Cognome"
-                                         Title="Dipendente"
-                                         MinWidth="220px"
-                                         Filterable="true">
-                        <Template Context="d">
-                            @{ var isCurrentUser = d.ID_Dipendente == currentUserId; }
-                            <div class="d-flex align-items-center gap-3 py-1">
-                                <RadzenGravatar Email="@d.Username"
-                                               Style="width: 2.3em; height: 2.3em; border-radius: 0.5rem; flex-shrink: 0;" />
-                                <div class="d-flex flex-column min-w-0">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="fw-bold text-dark" style="font-size: 0.9rem;">@d.Nome @d.Cognome</span>
-                                        @if (isCurrentUser)
-                                        {
-                                            <span class="badge bg-primary-subtle text-primary border"
-                                                  style="font-size: 0.65rem; border-radius: 0.35rem; padding: 0.2em 0.45em;">Tu</span>
-                                        }
-                                    </div>
+    <!-- TABELLA UTENTI -->
+    <RadzenCard class="rz-shadow-sm p-0 mb-5 overflow-hidden" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+        <RadzenDataGrid @ref="grid"
+                        Data="@dipendentiFiltrati"
+                        TItem="Dipendente"
+                        IsLoading="@isLoading"
+                        AllowSorting="true"
+                        AllowPaging="true"
+                        PageSize="10"
+                        PagerHorizontalAlign="HorizontalAlign.Right"
+                        ShowPagingSummary="true"
+                        PagingSummaryFormat="Pagina {0} di {1} ({2} utenti)"
+                        EmptyText="Nessun utente trovato con i filtri impostati."
+                        class="rz-admin-grid">
+            <Columns>
+                <!-- ID -->
+                <RadzenDataGridColumn TItem="Dipendente"
+                                     Property="ID_Dipendente"
+                                     Title="ID"
+                                     Width="80px"
+                                     TextAlign="TextAlign.Center">
+                    <Template Context="d">
+                        <span class="text-muted small fw-medium">#@d.ID_Dipendente</span>
+                    </Template>
+                </RadzenDataGridColumn>
+
+                <!-- Dipendente -->
+                <RadzenDataGridColumn TItem="Dipendente"
+                                     Property="Cognome"
+                                     Title="Dipendente"
+                                     MinWidth="220px">
+                    <Template Context="d">
+                        @{ var isCurrentUser = d.ID_Dipendente == currentUserId; }
+                        <div class="d-flex align-items-center gap-3 py-1">
+                            <RadzenGravatar Email="@d.Username"
+                                           Style="width: 2.3em; height: 2.3em; border-radius: 0.5rem; flex-shrink: 0;" />
+                            <div class="d-flex flex-column min-w-0">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="fw-bold text-dark" style="font-size: 0.9rem;">@d.Nome @d.Cognome</span>
+                                    @if (isCurrentUser)
+                                    {
+                                        <span class="badge bg-primary-subtle text-primary border"
+                                              style="font-size: 0.65rem; border-radius: 0.35rem; padding: 0.2em 0.45em;">Tu</span>
+                                    }
                                 </div>
                             </div>
-                        </Template>
-                    </RadzenDataGridColumn>
+                        </div>
+                    </Template>
+                </RadzenDataGridColumn>
 
-                    <!-- Username (Filtrabile) -->
-                    <RadzenDataGridColumn TItem="Dipendente"
-                                         Property="Username"
-                                         Title="Username"
-                                         MinWidth="140px"
-                                         Filterable="true">
-                        <Template Context="d">
-                            <span class="text-muted small">@@@d.Username</span>
-                        </Template>
-                    </RadzenDataGridColumn>
+                <!-- Username -->
+                <RadzenDataGridColumn TItem="Dipendente"
+                                     Property="Username"
+                                     Title="Username"
+                                     MinWidth="140px">
+                    <Template Context="d">
+                        <span class="text-muted small">@@@d.Username</span>
+                    </Template>
+                </RadzenDataGridColumn>
 
-                    <!-- Ruolo (Non filtrabile) -->
-                    <RadzenDataGridColumn TItem="Dipendente"
-                                         Property="Ruolo"
-                                         Title="Ruolo"
-                                         Width="120px"
-                                         Filterable="false"
-                                         TextAlign="TextAlign.Center">
-                        <Template Context="d">
-                            @if (d.Ruolo == 1)
-                            {
-                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1" style="font-size: 0.72rem; border-radius: 0.35rem;">
-                                    <RadzenIcon Icon="shield" Style="font-size: 0.85em;" class="me-0.5" /> Admin
-                                </span>
-                            }
-                            else
-                            {
-                                <span class="badge bg-light text-secondary border px-2 py-1" style="font-size: 0.72rem; border-radius: 0.35rem;">Utente</span>
-                            }
-                        </Template>
-                    </RadzenDataGridColumn>
-
-                    <!-- Stato Account (Non filtrabile) -->
-                    <RadzenDataGridColumn TItem="Dipendente"
-                                         Property="StatoAccount"
-                                         Title="Stato"
-                                         Width="130px"
-                                         Filterable="false"
-                                         TextAlign="TextAlign.Center">
-                        <Template Context="d">
-                            @if (d.StatoAccount == 1)
-                            {
-                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: 0.72rem; border-radius: 0.35rem;">
-                                    <RadzenIcon Icon="check_circle" Style="font-size: 0.85em;" class="me-0.5" /> Attivo
-                                </span>
-                            }
-                            else
-                            {
-                                <span class="badge bg-secondary-subtle text-secondary border px-2 py-1" style="font-size: 0.72rem; border-radius: 0.35rem;">
-                                    <RadzenIcon Icon="block" Style="font-size: 0.85em;" class="me-0.5" /> Disabilitato
-                                </span>
-                            }
-                        </Template>
-                    </RadzenDataGridColumn>
-
-                    <!-- Ultimo Accesso (Non filtrabile) -->
-                    <RadzenDataGridColumn TItem="Dipendente"
-                                         Property="UltimoAccesso"
-                                         Title="Ultimo Accesso"
-                                         MinWidth="150px"
-                                         Filterable="false">
-                        <Template Context="d">
-                            <span class="text-muted small" style="font-size: 0.78rem;">
-                                @(d.UltimoAccesso.HasValue
-                                    ? d.UltimoAccesso.Value.ToLocalTime().ToString("dd MMM yyyy, HH:mm")
-                                    : "Mai effettuato")
+                <!-- Ruolo -->
+                <RadzenDataGridColumn TItem="Dipendente"
+                                     Property="Ruolo"
+                                     Title="Ruolo"
+                                     Width="120px"
+                                     TextAlign="TextAlign.Center">
+                    <Template Context="d">
+                        @if (d.Ruolo == 1)
+                        {
+                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1" style="font-size: 0.72rem; border-radius: 0.35rem;">
+                                <RadzenIcon Icon="shield" Style="font-size: 0.85em;" class="me-0.5" /> Admin
                             </span>
-                        </Template>
-                    </RadzenDataGridColumn>
+                        }
+                        else
+                        {
+                            <span class="badge bg-light text-secondary border px-2 py-1" style="font-size: 0.72rem; border-radius: 0.35rem;">Utente</span>
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
 
-                    <!-- Azioni -->
-                    <RadzenDataGridColumn TItem="Dipendente"
-                                         Title="Azioni"
-                                         Width="110px"
-                                         Sortable="false"
-                                         Filterable="false"
-                                         TextAlign="TextAlign.Right">
-                        <Template Context="d">
-                            @{ var isSelf = d.ID_Dipendente == currentUserId; }
-                            <div class="d-flex justify-content-end gap-1.5 pe-2">
-                                <RadzenButton Icon="@(d.Ruolo == 1 ? "remove_moderator" : "admin_panel_settings")"
-                                              Variant="Variant.Outlined"
-                                              ButtonStyle="@(d.Ruolo == 1 ? ButtonStyle.Secondary : ButtonStyle.Primary)"
-                                              Size="ButtonSize.Small"
-                                              Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
-                                              Disabled="@(isActionLoading || isSelf)"
-                                              Title="@(isSelf ? "Non puoi modificare il tuo stesso ruolo" : (d.Ruolo == 1 ? "Revoca privilegi Admin" : "Promuovi ad Admin"))"
-                                              Click="() => ToggleRuolo(d)" />
+                <!-- Stato Account -->
+                <RadzenDataGridColumn TItem="Dipendente"
+                                     Property="StatoAccount"
+                                     Title="Stato"
+                                     Width="130px"
+                                     TextAlign="TextAlign.Center">
+                    <Template Context="d">
+                        @if (d.StatoAccount == 1)
+                        {
+                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: 0.72rem; border-radius: 0.35rem;">
+                                <RadzenIcon Icon="check_circle" Style="font-size: 0.85em;" class="me-0.5" /> Attivo
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary-subtle text-secondary border px-2 py-1" style="font-size: 0.72rem; border-radius: 0.35rem;">
+                                <RadzenIcon Icon="block" Style="font-size: 0.85em;" class="me-0.5" /> Disabilitato
+                            </span>
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
 
-                                <RadzenButton Icon="@(d.StatoAccount == 1 ? "block" : "check_circle")"
-                                              Variant="Variant.Outlined"
-                                              ButtonStyle="@(d.StatoAccount == 1 ? ButtonStyle.Danger : ButtonStyle.Success)"
-                                              Size="ButtonSize.Small"
-                                              Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
-                                              Disabled="@(isActionLoading || isSelf)"
-                                              Title="@(isSelf ? "Non puoi disabilitare il tuo account" : (d.StatoAccount == 1 ? "Disabilita account" : "Riattiva account"))"
-                                              Click="() => ToggleStato(d)" />
-                            </div>
-                        </Template>
-                    </RadzenDataGridColumn>
+                <!-- Ultimo Accesso -->
+                <RadzenDataGridColumn TItem="Dipendente"
+                                     Property="UltimoAccesso"
+                                     Title="Ultimo Accesso"
+                                     MinWidth="150px">
+                    <Template Context="d">
+                        <span class="text-muted small" style="font-size: 0.78rem;">
+                            @(d.UltimoAccesso.HasValue
+                                ? d.UltimoAccesso.Value.ToLocalTime().ToString("dd MMM yyyy, HH:mm")
+                                : "Mai effettuato")
+                        </span>
+                    </Template>
+                </RadzenDataGridColumn>
 
-                </Columns>
-            </RadzenDataGrid>
-        </RadzenCard>
-    }
+                <!-- Azioni -->
+                <RadzenDataGridColumn TItem="Dipendente"
+                                     Title="Azioni"
+                                     Width="110px"
+                                     Sortable="false"
+                                     TextAlign="TextAlign.Right">
+                    <Template Context="d">
+                        @{ var isSelf = d.ID_Dipendente == currentUserId; }
+                        <div class="d-flex justify-content-end gap-1.5 pe-2">
+                            <RadzenButton Icon="@(d.Ruolo == 1 ? "remove_moderator" : "admin_panel_settings")"
+                                          Variant="Variant.Outlined"
+                                          ButtonStyle="@(d.Ruolo == 1 ? ButtonStyle.Secondary : ButtonStyle.Primary)"
+                                          Size="ButtonSize.Small"
+                                          Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
+                                          Disabled="@(isActionLoading || isSelf)"
+                                          Title="@(isSelf ? "Non puoi modificare il tuo stesso ruolo" : (d.Ruolo == 1 ? "Revoca privilegi Admin" : "Promuovi ad Admin"))"
+                                          Click="() => ToggleRuolo(d)" />
+
+                            <RadzenButton Icon="@(d.StatoAccount == 1 ? "block" : "check_circle")"
+                                          Variant="Variant.Outlined"
+                                          ButtonStyle="@(d.StatoAccount == 1 ? ButtonStyle.Danger : ButtonStyle.Success)"
+                                          Size="ButtonSize.Small"
+                                          Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
+                                          Disabled="@(isActionLoading || isSelf)"
+                                          Title="@(isSelf ? "Non puoi disabilitare il tuo account" : (d.StatoAccount == 1 ? "Disabilita account" : "Riattiva account"))"
+                                          Click="() => ToggleStato(d)" />
+                        </div>
+                    </Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+    </RadzenCard>
 </div>
 
 @code {
+    private RadzenDataGrid<Dipendente>? grid;
     private bool isLoading = true;
     private bool isActionLoading = false;
     private bool mostraFormNuovoUtente = false;
     private int currentUserId = 0;
     
     private List<Dipendente> dipendenti = new();
+    private List<Dipendente> dipendentiFiltrati = new();
     private NuovoUtenteModel nuovoUtenteModel = new();
 
-    private readonly List<OpzioneRuolo> opzioniRuolo = new()
+    private string filtroTesto = string.Empty;
+    private int? filtroRuolo;
+    private int? filtroStato;
+
+    private readonly List<OpzioneFiltro> opzioniRuolo = new()
     {
-        new OpzioneRuolo { Valore = 0, Nome = "Utente Standard (Dipendente)" },
-        new OpzioneRuolo { Valore = 1, Nome = "Amministratore (Admin)" }
+        new OpzioneFiltro { Valore = 0, Nome = "Utente Standard (Dipendente)" },
+        new OpzioneFiltro { Valore = 1, Nome = "Amministratore (Admin)" }
     };
 
-    private class OpzioneRuolo
+    private readonly List<OpzioneFiltro> opzioniFiltroRuolo = new()
+    {
+        new OpzioneFiltro { Valore = 0, Nome = "Utente" },
+        new OpzioneFiltro { Valore = 1, Nome = "Admin" }
+    };
+
+    private readonly List<OpzioneFiltro> opzioniFiltroStato = new()
+    {
+        new OpzioneFiltro { Valore = 1, Nome = "Attivo" },
+        new OpzioneFiltro { Valore = 0, Nome = "Disabilitato" }
+    };
+
+    private class OpzioneFiltro
     {
         public int Valore { get; set; }
         public string Nome { get; set; } = string.Empty;
@@ -352,6 +407,8 @@
                 .OrderBy(d => d.Cognome)
                 .ThenBy(d => d.Nome)
                 .ToListAsync();
+
+            ApplicaFiltri();
         }
         catch (Exception ex)
         {
@@ -367,6 +424,46 @@
         {
             isLoading = false;
         }
+    }
+
+    private void ApplicaFiltri()
+    {
+        dipendentiFiltrati = dipendenti.Where(d =>
+            (string.IsNullOrWhiteSpace(filtroTesto) ||
+             $"{d.Nome} {d.Cognome}".Contains(filtroTesto, StringComparison.OrdinalIgnoreCase) ||
+             d.Username.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase)) &&
+            (!filtroRuolo.HasValue || d.Ruolo == filtroRuolo.Value) &&
+            (!filtroStato.HasValue || d.StatoAccount == filtroStato.Value)).ToList();
+    }
+
+    private void OnFiltroTestoChanged(ChangeEventArgs e)
+    {
+        filtroTesto = e.Value?.ToString() ?? string.Empty;
+        ApplicaFiltri();
+        if (grid != null) grid.FirstPage();
+    }
+
+    private void OnFiltroRuoloChanged(int? value)
+    {
+        filtroRuolo = value;
+        ApplicaFiltri();
+        if (grid != null) grid.FirstPage();
+    }
+
+    private void OnFiltroStatoChanged(int? value)
+    {
+        filtroStato = value;
+        ApplicaFiltri();
+        if (grid != null) grid.FirstPage();
+    }
+
+    private void ResetFiltri()
+    {
+        filtroTesto = string.Empty;
+        filtroRuolo = null;
+        filtroStato = null;
+        ApplicaFiltri();
+        if (grid != null) grid.FirstPage();
     }
 
     private async Task CreaNuovoAccount()
@@ -415,7 +512,9 @@
 
             nuovoUtenteModel = new();
             mostraFormNuovoUtente = false;
+            
             await CaricaDipendenti();
+            if (grid != null) await grid.Reload();
         }
         catch (Exception ex)
         {
@@ -440,24 +539,23 @@
 
         try
         {
-            var d = await DbContext.Dipendenti.FindAsync(target.ID_Dipendente);
-            if (d != null)
+            var nuovoValoreRuolo = target.Ruolo == 1 ? 0 : 1;
+
+            await DbContext.Dipendenti
+                .Where(d => d.ID_Dipendente == target.ID_Dipendente)
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.Ruolo, nuovoValoreRuolo));
+
+            target.Ruolo = nuovoValoreRuolo;
+
+            var nuovoRuoloLabel = target.Ruolo == 1 ? "Amministratore" : "Utente standard";
+
+            NotificationService.Notify(new NotificationMessage
             {
-                d.Ruolo = d.Ruolo == 1 ? 0 : 1;
-                await DbContext.SaveChangesAsync();
-
-                var nuovoRuolo = d.Ruolo == 1 ? "Amministratore" : "Utente standard";
-
-                NotificationService.Notify(new NotificationMessage
-                {
-                    Severity = NotificationSeverity.Success,
-                    Summary = "Ruolo Aggiornato",
-                    Detail = $"{d.Nome} {d.Cognome} è ora {nuovoRuolo}.",
-                    Duration = 2500
-                });
-
-                await CaricaDipendenti();
-            }
+                Severity = NotificationSeverity.Success,
+                Summary = "Ruolo Aggiornato",
+                Detail = $"{target.Nome} {target.Cognome} è ora {nuovoRuoloLabel}.",
+                Duration = 2500
+            });
         }
         catch (Exception ex)
         {
@@ -482,24 +580,23 @@
 
         try
         {
-            var d = await DbContext.Dipendenti.FindAsync(target.ID_Dipendente);
-            if (d != null)
+            var nuovoStato = target.StatoAccount == 1 ? 0 : 1;
+
+            await DbContext.Dipendenti
+                .Where(d => d.ID_Dipendente == target.ID_Dipendente)
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.StatoAccount, nuovoStato));
+
+            target.StatoAccount = nuovoStato;
+
+            var statoDescrizione = target.StatoAccount == 1 ? "riattivato" : "disabilitato";
+
+            NotificationService.Notify(new NotificationMessage
             {
-                d.StatoAccount = d.StatoAccount == 1 ? 0 : 1;
-                await DbContext.SaveChangesAsync();
-
-                var statoDescrizione = d.StatoAccount == 1 ? "riattivato" : "disabilitato";
-
-                NotificationService.Notify(new NotificationMessage
-                {
-                    Severity = d.StatoAccount == 1 ? NotificationSeverity.Success : NotificationSeverity.Warning,
-                    Summary = "Stato Modificato",
-                    Detail = $"Account di {d.Nome} {d.Cognome} {statoDescrizione}.",
-                    Duration = 2500
-                });
-
-                await CaricaDipendenti();
-            }
+                Severity = target.StatoAccount == 1 ? NotificationSeverity.Success : NotificationSeverity.Warning,
+                Summary = "Stato Modificato",
+                Detail = $"Account di {target.Nome} {target.Cognome} {statoDescrizione}.",
+                Duration = 2500
+            });
         }
         catch (Exception ex)
         {

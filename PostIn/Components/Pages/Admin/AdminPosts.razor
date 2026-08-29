@@ -61,12 +61,14 @@
                     </span>
                     <input type="text" class="form-control border-start-0 modern-input"
                            placeholder="es. Titolo post o username..."
-                           @bind="filtroTesto" @bind:event="oninput" />
+                           value="@filtroTesto"
+                           @oninput="OnFiltroTestoChanged" />
                 </div>
             </div>
             <div class="col-lg-3 col-md-6">
                 <label class="form-label fw-bold small text-muted text-uppercase mb-1" style="font-size: 0.73rem; letter-spacing: 0.05em;">Categoria</label>
-                <RadzenDropDown @bind-Value="filtroCategoria"
+                <RadzenDropDown Value="@filtroCategoria"
+                                ValueChanged="@((int? val) => OnFiltroCategoriaChanged(val))"
                                 Data="@tutteCategorie"
                                 TextProperty="NomeCategoria"
                                 ValueProperty="ID_Categoria"
@@ -81,17 +83,19 @@
             </div>
             <div class="col-lg-2 col-md-4">
                 <label class="form-label fw-bold small text-muted text-uppercase mb-1" style="font-size: 0.73rem; letter-spacing: 0.05em;">Dal</label>
-                <RadzenDatePicker @bind-Value="filtroDataDa" 
-                                DateFormat="dd/MM/yyyy" 
-                                Placeholder="gg/mm/aaaa"
-                                Style="width: 100%; border-radius: 0.55rem;" />
+                <RadzenDatePicker Value="@filtroDataDa" 
+                                  ValueChanged="@((DateTime? val) => OnFiltroDataDaChanged(val))"
+                                  DateFormat="dd/MM/yyyy" 
+                                  Placeholder="gg/mm/aaaa"
+                                  Style="width: 100%; border-radius: 0.55rem;" />
             </div>
             <div class="col-lg-2 col-md-4">
                 <label class="form-label fw-bold small text-muted text-uppercase mb-1" style="font-size: 0.73rem; letter-spacing: 0.05em;">Al</label>
-                <RadzenDatePicker @bind-Value="filtroDataA" 
-                                DateFormat="dd/MM/yyyy" 
-                                Placeholder="gg/mm/aaaa"
-                                Style="width: 100%; border-radius: 0.55rem;" />
+                <RadzenDatePicker Value="@filtroDataA" 
+                                  ValueChanged="@((DateTime? val) => OnFiltroDataAChanged(val))"
+                                  DateFormat="dd/MM/yyyy" 
+                                  Placeholder="gg/mm/aaaa"
+                                  Style="width: 100%; border-radius: 0.55rem;" />
             </div>
             <div class="col-lg-1 col-md-4 text-end">
                 <RadzenButton Icon="filter_alt_off"
@@ -105,170 +109,152 @@
         </div>
     </RadzenCard>
 
+    <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+        <span class="text-muted small">
+            Visualizzati <strong>@articoliFiltrati.Count</strong> di <strong>@articoli.Count</strong> articoli
+        </span>
+    </div>
+
     <!-- TABELLA ARTICOLI -->
-    @if (isLoading)
-    {
-        <div class="text-center py-5">
-            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
-            <p class="text-muted small mt-2">Caricamento archivio articoli...</p>
-        </div>
-    }
-    else
-    {
-        var filtrati = articoli
-            .Where(a =>
-                (string.IsNullOrWhiteSpace(filtroTesto) ||
-                 a.Titolo.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase) ||
-                 $"{a.Autore.Nome} {a.Autore.Cognome}".Contains(filtroTesto, StringComparison.OrdinalIgnoreCase) ||
-                 a.Autore.Username.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase)) &&
-                (!filtroCategoria.HasValue || a.ArticoloCategorie.Any(ac => ac.FK_Categoria == filtroCategoria.Value)) &&
-                (!filtroDataDa.HasValue || a.DataOraCreazione.Date >= filtroDataDa.Value.Date) &&
-                (!filtroDataA.HasValue || a.DataOraCreazione.Date <= filtroDataA.Value.Date))
-            .ToList();
+    <RadzenCard class="rz-shadow-sm p-0 mb-5 overflow-hidden" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+        <RadzenDataGrid @ref="grid"
+                        Data="@articoliFiltrati"
+                        TItem="Articolo"
+                        IsLoading="@isLoading"
+                        AllowSorting="true"
+                        AllowPaging="true"
+                        PageSize="10"
+                        PagerHorizontalAlign="HorizontalAlign.Right"
+                        ShowPagingSummary="true"
+                        PagingSummaryFormat="Pagina {0} di {1} ({2} articoli)"
+                        EmptyText="Nessun articolo corrisponde ai filtri impostati."
+                        class="rz-admin-grid">
+            <Columns>
 
-        <div class="d-flex justify-content-between align-items-center mb-2 px-1">
-            <span class="text-muted small">
-                Visualizzati <strong>@filtrati.Count</strong> di <strong>@articoli.Count</strong> articoli
-            </span>
-        </div>
-
-        <RadzenCard class="rz-shadow-sm p-0 mb-5 overflow-hidden" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
-            <RadzenDataGrid Data="@filtrati"
-                            TItem="Articolo"
-                            AllowSorting="true"
-                            AllowPaging="true"
-                            PageSize="10"
-                            PagerHorizontalAlign="HorizontalAlign.Right"
-                            ShowPagingSummary="true"
-                            PagingSummaryFormat="Pagina {0} di {1} ({2} articoli)"
-                            EmptyText="Nessun articolo corrisponde ai filtri impostati."
-                            class="rz-admin-grid">
-                <Columns>
-
-                    <!-- Articolo -->
-                    <RadzenDataGridColumn TItem="Articolo" Property="Titolo" Title="Articolo" MinWidth="220px">
-                        <Template Context="art">
-                            <div class="d-flex align-items-center gap-2 py-1">
-                                @if (!string.IsNullOrWhiteSpace(art.ImmagineCopertina))
-                                {
-                                    <img src="@art.ImmagineCopertina" alt=""
-                                         class="grid-thumb"
-                                         onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
-                                    <div class="grid-thumb-placeholder" style="display:none;">
-                                        <RadzenIcon Icon="article" Style="font-size: 1.1em; color: #94a3b8;" />
-                                    </div>
-                                }
-                                else
-                                {
-                                    <div class="grid-thumb-placeholder">
-                                        <RadzenIcon Icon="article" Style="font-size: 1.1em; color: #94a3b8;" />
-                                    </div>
-                                }
-                                <div class="min-w-0">
-                                    <a href="/post/@art.ID_Articolo"
-                                       class="fw-semibold text-dark text-decoration-none admin-post-link d-block"
-                                       style="font-size: 0.87rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 15rem;"
-                                       title="@art.Titolo">@art.Titolo</a>
-                                    <span class="text-muted" style="font-size: 0.72rem;">ID #@art.ID_Articolo</span>
+                <!-- Articolo -->
+                <RadzenDataGridColumn TItem="Articolo" Property="Titolo" Title="Articolo" MinWidth="220px">
+                    <Template Context="art">
+                        <div class="d-flex align-items-center gap-2 py-1">
+                            @if (!string.IsNullOrWhiteSpace(art.ImmagineCopertina))
+                            {
+                                <img src="@art.ImmagineCopertina" alt=""
+                                     class="grid-thumb"
+                                     onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+                                <div class="grid-thumb-placeholder" style="display:none;">
+                                    <RadzenIcon Icon="article" Style="font-size: 1.1em; color: #94a3b8;" />
                                 </div>
-                            </div>
-                        </Template>
-                    </RadzenDataGridColumn>
-
-                    <!-- Autore -->
-                    <RadzenDataGridColumn TItem="Articolo" Property="Autore.Cognome" Title="Autore" MinWidth="160px">
-                        <Template Context="art">
-                            <div class="d-flex align-items-center gap-2">
-                                <RadzenGravatar Email="@art.Autore?.Username"
-                                               Style="width: 2.2em; height: 2.2em; border-radius: 0.45rem; flex-shrink: 0;" />
-                                <div class="min-w-0">
-                                    <span class="fw-semibold d-block text-dark" style="font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 11rem;">
-                                        @art.Autore?.Nome @art.Autore?.Cognome
-                                    </span>
-                                    <span class="text-muted" style="font-size: 0.72rem;">@@@art.Autore?.Username</span>
+                            }
+                            else
+                            {
+                                <div class="grid-thumb-placeholder">
+                                    <RadzenIcon Icon="article" Style="font-size: 1.1em; color: #94a3b8;" />
                                 </div>
+                            }
+                            <div class="min-w-0">
+                                <a href="/post/@art.ID_Articolo"
+                                   class="fw-semibold text-dark text-decoration-none admin-post-link d-block"
+                                   style="font-size: 0.87rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 15rem;"
+                                   title="@art.Titolo">@art.Titolo</a>
+                                <span class="text-muted" style="font-size: 0.72rem;">ID #@art.ID_Articolo</span>
                             </div>
-                        </Template>
-                    </RadzenDataGridColumn>
+                        </div>
+                    </Template>
+                </RadzenDataGridColumn>
 
-                    <!-- Categorie -->
-                    <RadzenDataGridColumn TItem="Articolo" Title="Categorie" Width="140px" Sortable="false" Filterable="false">
-                        <Template Context="art">
-                            <div class="d-flex flex-wrap gap-1">
-                                @foreach (var ac in art.ArticoloCategorie.Take(2))
-                                {
-                                    <span class="category-badge">#@ac.Categoria?.NomeCategoria</span>
-                                }
-                                @if (art.ArticoloCategorie.Count > 2)
-                                {
-                                    <span class="badge bg-light text-muted border" style="font-size: 0.68rem; border-radius: 0.35rem;">
-                                        +@(art.ArticoloCategorie.Count - 2)
-                                    </span>
-                                }
+                <!-- Autore -->
+                <RadzenDataGridColumn TItem="Articolo" Property="Autore.Cognome" Title="Autore" MinWidth="160px">
+                    <Template Context="art">
+                        <div class="d-flex align-items-center gap-2">
+                            <RadzenGravatar Email="@art.Autore?.Username"
+                                           Style="width: 2.2em; height: 2.2em; border-radius: 0.45rem; flex-shrink: 0;" />
+                            <div class="min-w-0">
+                                <span class="fw-semibold d-block text-dark" style="font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 11rem;">
+                                    @art.Autore?.Nome @art.Autore?.Cognome
+                                </span>
+                                <span class="text-muted" style="font-size: 0.72rem;">@@@art.Autore?.Username</span>
                             </div>
-                        </Template>
-                    </RadzenDataGridColumn>
+                        </div>
+                    </Template>
+                </RadzenDataGridColumn>
 
-                    <!-- Data (gg/mm/aa) -->
-                    <RadzenDataGridColumn TItem="Articolo" Property="DataOraCreazione" Title="Data" Width="110px">
-                        <Template Context="art">
-                            <span class="text-muted small" style="font-size: 0.82rem;">
-                                @art.DataOraCreazione.ToLocalTime().ToString("dd/MM/yy")
+                <!-- Categorie -->
+                <RadzenDataGridColumn TItem="Articolo" Title="Categorie" Width="140px" Sortable="false" Filterable="false">
+                    <Template Context="art">
+                        <div class="d-flex flex-wrap gap-1">
+                            @foreach (var ac in art.ArticoloCategorie.Take(2))
+                            {
+                                <span class="category-badge">#@ac.Categoria?.NomeCategoria</span>
+                            }
+                            @if (art.ArticoloCategorie.Count > 2)
+                            {
+                                <span class="badge bg-light text-muted border" style="font-size: 0.68rem; border-radius: 0.35rem;">
+                                    +@(art.ArticoloCategorie.Count - 2)
+                                </span>
+                            }
+                        </div>
+                    </Template>
+                </RadzenDataGridColumn>
+
+                <!-- Data (gg/mm/aa) -->
+                <RadzenDataGridColumn TItem="Articolo" Property="DataOraCreazione" Title="Data" Width="110px">
+                    <Template Context="art">
+                        <span class="text-muted small" style="font-size: 0.82rem;">
+                            @art.DataOraCreazione.ToLocalTime().ToString("dd/MM/yy")
+                        </span>
+                    </Template>
+                </RadzenDataGridColumn>
+
+                <!-- Stats -->
+                <RadzenDataGridColumn TItem="Articolo" Title="Stats" Width="120px" Sortable="false" Filterable="false" TextAlign="TextAlign.Center">
+                    <Template Context="art">
+                        <div class="d-flex align-items-center justify-content-center gap-2 text-muted" style="font-size: 0.82rem;">
+                            <span title="Visualizzazioni" class="d-flex align-items-center gap-1">
+                                <RadzenIcon Icon="visibility" Style="font-size: 1em; color: #64748b;" /> @art.Visualizzazioni.Count
                             </span>
-                        </Template>
-                    </RadzenDataGridColumn>
+                            <span title="Like" class="d-flex align-items-center gap-1">
+                                <RadzenIcon Icon="favorite" Style="font-size: 1em; color: #ef4444;" /> @art.Likes.Count
+                            </span>
+                            <span title="Commenti" class="d-flex align-items-center gap-1">
+                                <RadzenIcon Icon="chat_bubble" Style="font-size: 1em; color: #6366f1;" /> @art.Commenti.Count
+                            </span>
+                        </div>
+                    </Template>
+                </RadzenDataGridColumn>
 
-                    <!-- Stats -->
-                    <RadzenDataGridColumn TItem="Articolo" Title="Stats" Width="120px" Sortable="false" Filterable="false" TextAlign="TextAlign.Center">
-                        <Template Context="art">
-                            <div class="d-flex align-items-center justify-content-center gap-2 text-muted" style="font-size: 0.82rem;">
-                                <span title="Visualizzazioni" class="d-flex align-items-center gap-1">
-                                    <RadzenIcon Icon="visibility" Style="font-size: 1em; color: #64748b;" /> @art.Visualizzazioni.Count
-                                </span>
-                                <span title="Like" class="d-flex align-items-center gap-1">
-                                    <RadzenIcon Icon="favorite" Style="font-size: 1em; color: #ef4444;" /> @art.Likes.Count
-                                </span>
-                                <span title="Commenti" class="d-flex align-items-center gap-1">
-                                    <RadzenIcon Icon="chat_bubble" Style="font-size: 1em; color: #6366f1;" /> @art.Commenti.Count
-                                </span>
-                            </div>
-                        </Template>
-                    </RadzenDataGridColumn>
+                <!-- Azioni -->
+                <RadzenDataGridColumn TItem="Articolo" Title="Azioni" Width="100px" Sortable="false" Filterable="false" TextAlign="TextAlign.Right">
+                    <Template Context="art">
+                        <div class="d-flex justify-content-end gap-1 pe-1">
+                            <a href="/post/@art.ID_Articolo"
+                               class="btn btn-sm btn-outline-secondary"
+                               style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
+                               title="Visualizza">
+                                <RadzenIcon Icon="visibility" Style="font-size: 0.9em;" />
+                            </a>
+                            <RadzenButton Icon="delete"
+                                          Variant="Variant.Outlined"
+                                          ButtonStyle="ButtonStyle.Danger"
+                                          Size="ButtonSize.Small"
+                                          Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
+                                          Title="Elimina"
+                                          Disabled="@isActionLoading"
+                                          Click="() => EliminaArticolo(art)" />
+                        </div>
+                    </Template>
+                </RadzenDataGridColumn>
 
-                    <!-- Azioni -->
-                    <RadzenDataGridColumn TItem="Articolo" Title="Azioni" Width="100px" Sortable="false" Filterable="false" TextAlign="TextAlign.Right">
-                        <Template Context="art">
-                            <div class="d-flex justify-content-end gap-1 pe-1">
-                                <RadzenButton Icon="visibility"
-                                              Variant="Variant.Outlined"
-                                              ButtonStyle="ButtonStyle.Secondary"
-                                              Size="ButtonSize.Small"
-                                              Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
-                                              Title="Visualizza"
-                                              Click='() => NavigationManager.NavigateTo($"/post/{art.ID_Articolo}")' />
-                                <RadzenButton Icon="delete"
-                                              Variant="Variant.Outlined"
-                                              ButtonStyle="ButtonStyle.Danger"
-                                              Size="ButtonSize.Small"
-                                              Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
-                                              Title="Elimina"
-                                              IsBusy="@isActionLoading"
-                                              Click="() => EliminaArticolo(art.ID_Articolo, art.Titolo)" />
-                            </div>
-                        </Template>
-                    </RadzenDataGridColumn>
-
-                </Columns>
-            </RadzenDataGrid>
-        </RadzenCard>
-    }
+            </Columns>
+        </RadzenDataGrid>
+    </RadzenCard>
 </div>
 
 @code {
+    private RadzenDataGrid<Articolo>? grid;
     private bool isLoading = true;
     private bool isActionLoading = false;
 
     private List<Articolo> articoli = new();
+    private List<Articolo> articoliFiltrati = new();
     private List<Categoria> tutteCategorie = new();
 
     private string filtroTesto = string.Empty;
@@ -301,6 +287,8 @@
                 .Include(a => a.Commenti)
                 .OrderByDescending(a => a.DataOraCreazione)
                 .ToListAsync();
+
+            ApplicaFiltri();
         }
         catch (Exception ex)
         {
@@ -318,36 +306,81 @@
         }
     }
 
+    private void ApplicaFiltri()
+    {
+        articoliFiltrati = articoli.Where(a =>
+            (string.IsNullOrWhiteSpace(filtroTesto) ||
+             a.Titolo.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase) ||
+             $"{a.Autore.Nome} {a.Autore.Cognome}".Contains(filtroTesto, StringComparison.OrdinalIgnoreCase) ||
+             a.Autore.Username.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase)) &&
+            (!filtroCategoria.HasValue || a.ArticoloCategorie.Any(ac => ac.FK_Categoria == filtroCategoria.Value)) &&
+            (!filtroDataDa.HasValue || a.DataOraCreazione.Date >= filtroDataDa.Value.Date) &&
+            (!filtroDataA.HasValue || a.DataOraCreazione.Date <= filtroDataA.Value.Date)).ToList();
+    }
+
+    private void OnFiltroTestoChanged(ChangeEventArgs e)
+    {
+        filtroTesto = e.Value?.ToString() ?? string.Empty;
+        ApplicaFiltri();
+        if (grid != null) grid.FirstPage();
+    }
+
+    private void OnFiltroCategoriaChanged(int? value)
+    {
+        filtroCategoria = value;
+        ApplicaFiltri();
+        if (grid != null) grid.FirstPage();
+    }
+
+    private void OnFiltroDataDaChanged(DateTime? value)
+    {
+        filtroDataDa = value;
+        ApplicaFiltri();
+        if (grid != null) grid.FirstPage();
+    }
+
+    private void OnFiltroDataAChanged(DateTime? value)
+    {
+        filtroDataA = value;
+        ApplicaFiltri();
+        if (grid != null) grid.FirstPage();
+    }
+
     private void ResetFiltri()
     {
         filtroTesto = string.Empty;
         filtroCategoria = null;
         filtroDataDa = null;
         filtroDataA = null;
+        ApplicaFiltri();
+        if (grid != null) grid.FirstPage();
     }
 
-    private async Task EliminaArticolo(int articoloId, string titoloArticolo)
+    private async Task EliminaArticolo(Articolo target)
     {
         if (isActionLoading) return;
         isActionLoading = true;
 
         try
         {
-            var art = await DbContext.Articoli.FindAsync(articoloId);
-            if (art != null)
+            await DbContext.Articoli
+                .Where(a => a.ID_Articolo == target.ID_Articolo)
+                .ExecuteDeleteAsync();
+
+            articoli.Remove(target);
+            articoliFiltrati.Remove(target);
+
+            NotificationService.Notify(new NotificationMessage
             {
-                DbContext.Articoli.Remove(art);
-                await DbContext.SaveChangesAsync();
+                Severity = NotificationSeverity.Info,
+                Summary = "Articolo Eliminato",
+                Detail = $"L'articolo '{target.Titolo}' è stato rimosso dalla piattaforma.",
+                Duration = 2500
+            });
 
-                NotificationService.Notify(new NotificationMessage
-                {
-                    Severity = NotificationSeverity.Info,
-                    Summary = "Articolo Eliminato",
-                    Detail = $"L'articolo '{titoloArticolo}' è stato rimosso dalla piattaforma.",
-                    Duration = 2500
-                });
-
-                await CaricaArticoli();
+            if (grid != null)
+            {
+                await grid.Reload();
             }
         }
         catch (Exception ex)

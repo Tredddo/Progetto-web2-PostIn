@@ -65,8 +65,8 @@
                     <input type="text"
                            class="form-control border-start-0 modern-input"
                            placeholder="Cerca parole chiave, utente o titolo articolo..."
-                           @bind="filtroTesto"
-                           @bind:event="oninput" />
+                           value="@filtroTesto"
+                           @oninput="OnFiltroTestoChanged" />
                 </div>
             </div>
 
@@ -74,10 +74,11 @@
                 <label class="form-label fw-bold small text-muted text-uppercase mb-1" style="font-size: 0.73rem; letter-spacing: 0.05em;">
                     Data di Pubblicazione
                 </label>
-                <RadzenDatePicker @bind-Value="filtroData" 
-                                DateFormat="dd/MM/yyyy" 
-                                Placeholder="gg/mm/aaaa"
-                                Style="width: 100%; border-radius: 0.55rem;" />
+                <RadzenDatePicker Value="@filtroData" 
+                                  ValueChanged="@((DateTime? val) => OnFiltroDataChanged(val))"
+                                  DateFormat="dd/MM/yyyy" 
+                                  Placeholder="gg/mm/aaaa"
+                                  Style="width: 100%; border-radius: 0.55rem;" />
             </div>
 
             <div class="col-md-2 col-lg-2 text-end">
@@ -92,139 +93,122 @@
         </div>
     </RadzenCard>
 
+    <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+        <span class="text-muted small">
+            Visualizzati <strong>@commentiFiltrati.Count</strong> di <strong>@commenti.Count</strong> commenti
+        </span>
+    </div>
+
     <!-- TABELLA COMMENTI -->
-    @if (isLoading)
-    {
-        <div class="text-center py-5">
-            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" />
-            <p class="text-muted small mt-2">Caricamento commenti in corso...</p>
-        </div>
-    }
-    else
-    {
-        var filtrati = commenti
-            .Where(c =>
-                (string.IsNullOrWhiteSpace(filtroTesto) ||
-                 c.TestoCommento.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase) ||
-                 (c.Autore != null && $"{c.Autore.Nome} {c.Autore.Cognome}".Contains(filtroTesto, StringComparison.OrdinalIgnoreCase)) ||
-                 (c.Autore != null && c.Autore.Username.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase)) ||
-                 (c.Articolo != null && c.Articolo.Titolo.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase))) &&
-                (!filtroData.HasValue || c.DataPubblicazione.Date == filtroData.Value.Date))
-            .ToList();
+    <RadzenCard class="rz-shadow-sm p-0 mb-5 overflow-hidden" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
+        <RadzenDataGrid @ref="grid"
+                        Data="@commentiFiltrati"
+                        TItem="Commento"
+                        IsLoading="@isLoading"
+                        AllowSorting="true"
+                        AllowPaging="true"
+                        PageSize="10"
+                        PagerHorizontalAlign="HorizontalAlign.Right"
+                        ShowPagingSummary="true"
+                        PagingSummaryFormat="Pagina {0} di {1} ({2} commenti)"
+                        EmptyText="Nessun commento trovato con i criteri selezionati."
+                        class="rz-admin-grid">
+            <Columns>
 
-        <div class="d-flex justify-content-between align-items-center mb-2 px-1">
-            <span class="text-muted small">
-                Visualizzati <strong>@filtrati.Count</strong> di <strong>@commenti.Count</strong> commenti
-            </span>
-        </div>
-
-        <RadzenCard class="rz-shadow-sm p-0 mb-5 overflow-hidden" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
-            <RadzenDataGrid Data="@filtrati"
-                            TItem="Commento"
-                            AllowSorting="true"
-                            AllowPaging="true"
-                            PageSize="10"
-                            PagerHorizontalAlign="HorizontalAlign.Right"
-                            ShowPagingSummary="true"
-                            PagingSummaryFormat="Pagina {0} di {1} ({2} commenti)"
-                            EmptyText="Nessun commento trovato con i criteri selezionati."
-                            class="rz-admin-grid">
-                <Columns>
-
-                    <!-- Autore -->
-                    <RadzenDataGridColumn TItem="Commento" Property="Autore.Cognome" Title="Autore" MinWidth="180px">
-                        <Template Context="c">
-                            <div class="d-flex align-items-center gap-2 py-1">
-                                <RadzenGravatar Email="@c.Autore?.Username" Style="width: 2.3em; height: 2.3em; border-radius: 0.45rem; flex-shrink: 0;" />
-                                <div class="min-w-0">
-                                    <span class="fw-bold text-dark d-block small">
-                                        @(c.Autore != null ? $"{c.Autore.Nome} {c.Autore.Cognome}" : "Anonimo")
-                                    </span>
-                                    <span class="text-muted" style="font-size: 0.72rem;">@@@c.Autore?.Username</span>
-                                </div>
+                <!-- Autore -->
+                <RadzenDataGridColumn TItem="Commento" Property="Autore.Cognome" Title="Autore" MinWidth="180px">
+                    <Template Context="c">
+                        <div class="d-flex align-items-center gap-2 py-1">
+                            <RadzenGravatar Email="@c.Autore?.Username" Style="width: 2.3em; height: 2.3em; border-radius: 0.45rem; flex-shrink: 0;" />
+                            <div class="min-w-0">
+                                <span class="fw-bold text-dark d-block small">
+                                    @(c.Autore != null ? $"{c.Autore.Nome} {c.Autore.Cognome}" : "Anonimo")
+                                </span>
+                                <span class="text-muted" style="font-size: 0.72rem;">@@@c.Autore?.Username</span>
                             </div>
-                        </Template>
-                    </RadzenDataGridColumn>
+                        </div>
+                    </Template>
+                </RadzenDataGridColumn>
 
-                    <!-- Testo Commento -->
-                    <RadzenDataGridColumn TItem="Commento" Property="TestoCommento" Title="Commento" MinWidth="240px">
-                        <Template Context="c">
-                            <div class="p-2 rounded-2 bg-light border text-dark" style="font-size: 0.85rem; line-height: 1.45; word-break: break-word;">
-                                @c.TestoCommento
-                            </div>
-                        </Template>
-                    </RadzenDataGridColumn>
+                <!-- Testo Commento -->
+                <RadzenDataGridColumn TItem="Commento" Property="TestoCommento" Title="Commento" MinWidth="240px">
+                    <Template Context="c">
+                        <div class="p-2 rounded-2 bg-light border text-dark" style="font-size: 0.85rem; line-height: 1.45; word-break: break-word;">
+                            @c.TestoCommento
+                        </div>
+                    </Template>
+                </RadzenDataGridColumn>
 
-                    <!-- Articolo Collegato -->
-                    <RadzenDataGridColumn TItem="Commento" Property="Articolo.Titolo" Title="Articolo" MinWidth="170px">
-                        <Template Context="c">
+                <!-- Articolo Collegato -->
+                <RadzenDataGridColumn TItem="Commento" Property="Articolo.Titolo" Title="Articolo" MinWidth="170px">
+                    <Template Context="c">
+                        @if (c.Articolo != null)
+                        {
+                            <a href="/post/@c.FK_Articolo"
+                               class="fw-semibold text-dark text-decoration-none admin-comment-link d-block text-truncate small"
+                               title="@c.Articolo.Titolo">
+                                <RadzenIcon Icon="article" Style="font-size: 0.9em;" class="me-1 text-muted" />
+                                @c.Articolo.Titolo
+                            </a>
+                            <span class="text-muted" style="font-size: 0.7rem;">ID: #@c.FK_Articolo</span>
+                        }
+                        else
+                        {
+                            <span class="text-muted small fst-italic">Articolo rimosso</span>
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+
+                <!-- Data -->
+                <RadzenDataGridColumn TItem="Commento" 
+                                    Property="DataPubblicazione" 
+                                    Title="Data" 
+                                    Width="140px"
+                                    FormatString="{0:dd/MM/yy, HH:mm}">
+                    <Template Context="c">
+                        <span class="text-muted small" style="font-size: 0.78rem;">
+                            @c.DataPubblicazione.ToLocalTime().ToString("dd/MM/yy, HH:mm")
+                        </span>
+                    </Template>
+                </RadzenDataGridColumn>
+
+                <!-- Azioni -->
+                <RadzenDataGridColumn TItem="Commento" Title="Azioni" Width="110px" Sortable="false" Filterable="false" TextAlign="TextAlign.Right">
+                    <Template Context="c">
+                        <div class="d-flex justify-content-end gap-1.5 pe-2">
                             @if (c.Articolo != null)
                             {
                                 <a href="/post/@c.FK_Articolo"
-                                   class="fw-semibold text-dark text-decoration-none admin-comment-link d-block text-truncate small"
-                                   title="@c.Articolo.Titolo">
-                                    <RadzenIcon Icon="article" Style="font-size: 0.9em;" class="me-1 text-muted" />
-                                    @c.Articolo.Titolo
+                                   class="btn btn-sm btn-outline-secondary"
+                                   style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
+                                   title="Vedi nel Post">
+                                    <RadzenIcon Icon="visibility" Style="font-size: 0.9em;" />
                                 </a>
-                                <span class="text-muted" style="font-size: 0.7rem;">ID: #@c.FK_Articolo</span>
                             }
-                            else
-                            {
-                                <span class="text-muted small fst-italic">Articolo rimosso</span>
-                            }
-                        </Template>
-                    </RadzenDataGridColumn>
+                            <RadzenButton Icon="delete"
+                                          Variant="Variant.Outlined"
+                                          ButtonStyle="ButtonStyle.Danger"
+                                          Size="ButtonSize.Small"
+                                          Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
+                                          Title="Elimina Commento"
+                                          Disabled="@isActionLoading"
+                                          Click="() => EliminaCommento(c)" />
+                        </div>
+                    </Template>
+                </RadzenDataGridColumn>
 
-                    <!-- Data -->
-                    <RadzenDataGridColumn TItem="Commento" 
-                                        Property="DataPubblicazione" 
-                                        Title="Data" 
-                                        Width="140px"
-                                        FormatString="{0:dd/MM/yy, HH:mm}">
-                        <Template Context="c">
-                            <span class="text-muted small" style="font-size: 0.78rem;">
-                                @c.DataPubblicazione.ToLocalTime().ToString("dd/MM/yy, HH:mm")
-                            </span>
-                        </Template>
-                    </RadzenDataGridColumn>
-
-                    <!-- Azioni -->
-                    <RadzenDataGridColumn TItem="Commento" Title="Azioni" Width="110px" Sortable="false" Filterable="false" TextAlign="TextAlign.Right">
-                        <Template Context="c">
-                            <div class="d-flex justify-content-end gap-1.5 pe-2">
-                                @if (c.Articolo != null)
-                                {
-                                    <RadzenButton Icon="visibility"
-                                                  Variant="Variant.Outlined"
-                                                  ButtonStyle="ButtonStyle.Secondary"
-                                                  Size="ButtonSize.Small"
-                                                  Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
-                                                  Title="Vedi nel Post"
-                                                  Click='() => NavigationManager.NavigateTo($"/post/{c.FK_Articolo}")' />
-                                }
-                                <RadzenButton Icon="delete"
-                                              Variant="Variant.Outlined"
-                                              ButtonStyle="ButtonStyle.Danger"
-                                              Size="ButtonSize.Small"
-                                              Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
-                                              Title="Elimina Commento"
-                                              IsBusy="@isActionLoading"
-                                              Click="() => EliminaCommento(c.ID_Commento)" />
-                            </div>
-                        </Template>
-                    </RadzenDataGridColumn>
-
-                </Columns>
-            </RadzenDataGrid>
-        </RadzenCard>
-    }
+            </Columns>
+        </RadzenDataGrid>
+    </RadzenCard>
 </div>
 
 @code {
+    private RadzenDataGrid<Commento>? grid;
     private bool isLoading = true;
     private bool isActionLoading = false;
 
     private List<Commento> commenti = new();
+    private List<Commento> commentiFiltrati = new();
     private string filtroTesto = string.Empty;
     private DateTime? filtroData;
 
@@ -244,6 +228,8 @@
                 .Include(c => c.Articolo)
                 .OrderByDescending(c => c.DataPubblicazione)
                 .ToListAsync();
+
+            ApplicaFiltri();
         }
         catch (Exception ex)
         {
@@ -261,34 +247,64 @@
         }
     }
 
+    private void ApplicaFiltri()
+    {
+        commentiFiltrati = commenti.Where(c =>
+            (string.IsNullOrWhiteSpace(filtroTesto) ||
+             c.TestoCommento.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase) ||
+             (c.Autore != null && $"{c.Autore.Nome} {c.Autore.Cognome}".Contains(filtroTesto, StringComparison.OrdinalIgnoreCase)) ||
+             (c.Autore != null && c.Autore.Username.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase)) ||
+             (c.Articolo != null && c.Articolo.Titolo.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase))) &&
+            (!filtroData.HasValue || c.DataPubblicazione.Date == filtroData.Value.Date)).ToList();
+    }
+
+    private void OnFiltroTestoChanged(ChangeEventArgs e)
+    {
+        filtroTesto = e.Value?.ToString() ?? string.Empty;
+        ApplicaFiltri();
+        if (grid != null) grid.FirstPage();
+    }
+
+    private void OnFiltroDataChanged(DateTime? value)
+    {
+        filtroData = value;
+        ApplicaFiltri();
+        if (grid != null) grid.FirstPage();
+    }
+
     private void ResetFiltri()
     {
         filtroTesto = string.Empty;
         filtroData = null;
+        ApplicaFiltri();
+        if (grid != null) grid.FirstPage();
     }
 
-    private async Task EliminaCommento(int commentoId)
+    private async Task EliminaCommento(Commento target)
     {
         if (isActionLoading) return;
         isActionLoading = true;
 
         try
         {
-            var comm = await DbContext.Commenti.FindAsync(commentoId);
-            if (comm != null)
+            await DbContext.Commenti
+                .Where(c => c.ID_Commento == target.ID_Commento)
+                .ExecuteDeleteAsync();
+
+            commenti.Remove(target);
+            commentiFiltrati.Remove(target);
+
+            NotificationService.Notify(new NotificationMessage
             {
-                DbContext.Commenti.Remove(comm);
-                await DbContext.SaveChangesAsync();
+                Severity = NotificationSeverity.Info,
+                Summary = "Commento Rimosso",
+                Detail = "Il commento è stato eliminato con successo.",
+                Duration = 2500
+            });
 
-                NotificationService.Notify(new NotificationMessage
-                {
-                    Severity = NotificationSeverity.Info,
-                    Summary = "Commento Rimosso",
-                    Detail = "Il commento è stato eliminato con successo.",
-                    Duration = 2500
-                });
-
-                await CaricaCommenti();
+            if (grid != null)
+            {
+                await grid.Reload();
             }
         }
         catch (Exception ex)

@@ -58,3 +58,4 @@ nunit-*.xml
 
 # Customs
 [Uu]ploads/
+postin.db

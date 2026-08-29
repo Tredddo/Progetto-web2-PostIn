@@ -132,7 +132,7 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(c => c.FK_Autore)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // UNIQUE: Dipendente.Username (Case Insensitive come da script SQL)
+        // UNIQUE: Dipendente.Username (Case Insensitive)
         modelBuilder.Entity<Dipendente>()
             .HasIndex(d => d.Username)
             .IsUnique();
