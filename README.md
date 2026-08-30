@@ -1,4 +1,4 @@
-# PostIn — Portale Intranet per la Condivisione della Conoscenza Aziendale
+# PostIn - Portale Intranet per la Condivisione della Conoscenza Aziendale
 
 Progetto per l'esame di **Laboratorio di Programmazione Web II**.  
 Applicazione web sviluppata in **Microsoft Blazor Server (.NET 9)** con **Entity Framework Core** e **Radzen Blazor**, progettata per la gestione e condivisione di contenuti e conoscenze in ambiente intranet aziendale.
