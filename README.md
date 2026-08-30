@@ -7,20 +7,9 @@ Applicazione web sviluppata in **Microsoft Blazor Server (.NET 9)** con **Entity
 
 ## Anteprima dell'Applicazione
 
-- **Home / Feed Principale:**  
-  ![Feed Principale](docs/images/feed-home.png)
+![Feed Principale](docs/images/feed-home.png)
 
-- **Dettaglio Articolo e Interazioni:**  
-  ![Dettaglio Articolo](docs/images/post-detail.png)
-
-- **Creazione e Redazione Post:**  
-  ![Creazione Post](docs/images/create-post.png)
-
-- **Profilo Utente e Categorie Preferite:**  
-  ![Profilo Utente](docs/images/user-profile.png)
-
-- **Pannello di Amministrazione (Radzen DataGrid):**  
-  ![Pannello Admin](docs/images/admin-dashboard.png)
+[**Altre immagini**](docs/EXTRA/EXTRA.%20Immagini%20ui.md)
 
 ---
 
