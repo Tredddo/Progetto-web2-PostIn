@@ -11,10 +11,12 @@
 @inject ApplicationDbContext DbContext
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
+@inject DialogService DialogService
 
 <PageTitle>Gestione Commenti - Admin PostIn</PageTitle>
 
 <RadzenNotification />
+<RadzenDialog />
 
 <div class="mx-auto" style="max-width: 74em;">
 
@@ -119,7 +121,7 @@
                 <RadzenDataGridColumn TItem="Commento" Property="Autore.Cognome" Title="Autore" MinWidth="180px">
                     <Template Context="c">
                         <div class="d-flex align-items-center gap-2 py-1">
-                            <RadzenGravatar Email="@c.Autore?.Username" Style="width: 2.3em; height: 2.3em; border-radius: 0.45rem; flex-shrink: 0;" />
+                            <DiceBearAvatar Email="@c.Autore?.Username" Style="width: 2.3em; height: 2.3em; border-radius: 0.45rem; flex-shrink: 0;" />
                             <div class="min-w-0">
                                 <span class="fw-bold text-dark d-block small">
                                     @(c.Autore != null ? $"{c.Autore.Nome} {c.Autore.Cognome}" : "Anonimo")
@@ -287,24 +289,39 @@
 
         try
         {
-            await DbContext.Commenti
-                .Where(c => c.ID_Commento == target.ID_Commento)
-                .ExecuteDeleteAsync();
+            // Determina il nome dell'autore in modo sicuro
+            string nomeAutore = target.Autore != null 
+                ? $"{target.Autore.Nome} {target.Autore.Cognome}" 
+                : "un utente rimosso/anonimo";
 
-            commenti.Remove(target);
-            commentiFiltrati.Remove(target);
+            // Mostra il popup di conferma
+            bool conferma = await DialogService.Confirm(
+                $"Sei sicuro di voler eliminare il commento scritto da {nomeAutore}?", 
+                "Conferma Eliminazione", 
+                new ConfirmOptions() { OkButtonText = "Sì, Elimina", CancelButtonText = "Annulla" }) ?? false;
 
-            NotificationService.Notify(new NotificationMessage
+            // Se l'utente clicca "Sì", procedi con l'eliminazione
+            if (conferma)
             {
-                Severity = NotificationSeverity.Info,
-                Summary = "Commento Rimosso",
-                Detail = "Il commento è stato eliminato con successo.",
-                Duration = 2500
-            });
+                await DbContext.Commenti
+                    .Where(c => c.ID_Commento == target.ID_Commento)
+                    .ExecuteDeleteAsync();
 
-            if (grid != null)
-            {
-                await grid.Reload();
+                commenti.Remove(target);
+                commentiFiltrati.Remove(target);
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Info,
+                    Summary = "Commento Rimosso",
+                    Detail = "Il commento è stato eliminato con successo.",
+                    Duration = 2500
+                });
+
+                if (grid != null)
+                {
+                    await grid.Reload();
+                }
             }
         }
         catch (Exception ex)

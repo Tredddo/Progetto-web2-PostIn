@@ -11,10 +11,12 @@
 @inject ApplicationDbContext DbContext
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
+@inject DialogService DialogService
 
 <PageTitle>Gestione Articoli - Admin PostIn</PageTitle>
 
 <RadzenNotification />
+<RadzenDialog />
 
 <div class="mx-auto" style="max-width: 74em;">
 
@@ -165,7 +167,7 @@
                 <RadzenDataGridColumn TItem="Articolo" Property="Autore.Cognome" Title="Autore" MinWidth="160px">
                     <Template Context="art">
                         <div class="d-flex align-items-center gap-2">
-                            <RadzenGravatar Email="@art.Autore?.Username"
+                            <DiceBearAvatar Email="@art.Autore?.Username"
                                            Style="width: 2.2em; height: 2.2em; border-radius: 0.45rem; flex-shrink: 0;" />
                             <div class="min-w-0">
                                 <span class="fw-semibold d-block text-dark" style="font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 11rem;">
@@ -363,24 +365,34 @@
 
         try
         {
-            await DbContext.Articoli
-                .Where(a => a.ID_Articolo == target.ID_Articolo)
-                .ExecuteDeleteAsync();
+            // Mostra il popup di conferma
+            bool conferma = await DialogService.Confirm(
+                $"Sei sicuro di voler eliminare definitivamente l'articolo '{target.Titolo}' scritto da {target.Autore?.Nome} {target.Autore?.Cognome}?", 
+                "Conferma Eliminazione", 
+                new ConfirmOptions() { OkButtonText = "Sì, Elimina", CancelButtonText = "Annulla" }) ?? false;
 
-            articoli.Remove(target);
-            articoliFiltrati.Remove(target);
-
-            NotificationService.Notify(new NotificationMessage
+            // Se l'utente clicca "Sì", procedi con l'eliminazione
+            if (conferma)
             {
-                Severity = NotificationSeverity.Info,
-                Summary = "Articolo Eliminato",
-                Detail = $"L'articolo '{target.Titolo}' è stato rimosso dalla piattaforma.",
-                Duration = 2500
-            });
+                await DbContext.Articoli
+                    .Where(a => a.ID_Articolo == target.ID_Articolo)
+                    .ExecuteDeleteAsync();
 
-            if (grid != null)
-            {
-                await grid.Reload();
+                articoli.Remove(target);
+                articoliFiltrati.Remove(target);
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Info,
+                    Summary = "Articolo Eliminato",
+                    Detail = $"L'articolo '{target.Titolo}' è stato rimosso dalla piattaforma.",
+                    Duration = 2500
+                });
+
+                if (grid != null)
+                {
+                    await grid.Reload();
+                }
             }
         }
         catch (Exception ex)

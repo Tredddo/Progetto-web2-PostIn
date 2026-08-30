@@ -93,7 +93,7 @@ else
                 <!-- Meta Autore + Data -->
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4 pb-4 border-bottom">
                     <div class="d-flex align-items-center gap-3">
-                        <RadzenGravatar Email="@articolo.Autore?.Username" Style="width: 3em; height: 3em; border-radius: 0.65rem; flex-shrink: 0;" />
+                        <DiceBearAvatar Email="@articolo.Autore?.Username" Style="width: 3em; height: 3em; border-radius: 0.65rem; flex-shrink: 0;" />
                         <div>
                             <span class="fw-bold text-dark d-block" style="font-size: 0.95rem;">
                                 @(articolo.Autore != null ? $"{articolo.Autore.Nome} {articolo.Autore.Cognome}" : "Anonimo")
@@ -198,7 +198,7 @@ else
                         @foreach (var commento in articolo.Commenti.OrderByDescending(c => c.DataPubblicazione))
                         {
                             <div class="d-flex gap-3">
-                                <RadzenGravatar Email="@commento.Autore?.Username" Style="width: 2.6em; height: 2.6em; border-radius: 0.55rem; flex-shrink: 0;" />
+                                <DiceBearAvatar Email="@commento.Autore?.Username" Style="width: 2.6em; height: 2.6em; border-radius: 0.55rem; flex-shrink: 0;" />
                                 
                                 <div class="flex-grow-1 bg-light p-3 rounded-3 border">
                                     <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">

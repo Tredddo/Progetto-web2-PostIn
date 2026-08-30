@@ -1,0 +1,48 @@
+<img src="@AvatarUrl"
+     alt="@(Alt ?? EffectiveSeed)"
+     class="@Class"
+     style="@ComputedStyle"
+     @attributes="AdditionalAttributes" />
+
+@code {
+    [Parameter] public string? Seed { get; set; }
+    [Parameter] public string? Email { get; set; }
+
+    [Parameter] public string ApiVersion { get; set; } = "10.x";
+    [Parameter] public string AvatarStyle { get; set; } = "glyphs";
+
+    [Parameter] public int? Size { get; set; }
+    [Parameter] public string? Style { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Alt { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string EffectiveSeed =>
+        !string.IsNullOrWhiteSpace(Seed)
+            ? Seed
+            : !string.IsNullOrWhiteSpace(Email)
+                ? Email
+                : "default";
+
+    private string AvatarUrl
+    {
+        get
+        {
+            var seed = Uri.EscapeDataString(EffectiveSeed);
+
+            var url =
+                $"https://api.dicebear.com/{ApiVersion}/{AvatarStyle}/svg" +
+                $"?seed={seed}";
+
+            if (Size.HasValue)
+                url += $"&size={Size.Value}";
+
+            return url;
+        }
+    }
+
+    private string ComputedStyle =>
+        $"border-radius: 50%;{(Size.HasValue ? $" width:{Size}px;height:{Size}px;" : "")}{Style}";
+}

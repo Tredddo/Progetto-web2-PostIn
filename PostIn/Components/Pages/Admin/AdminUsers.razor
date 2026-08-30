@@ -14,10 +14,12 @@
 @inject ApplicationDbContext DbContext
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NotificationService NotificationService
+@inject DialogService DialogService
 
 <PageTitle>Gestione Utenti - Admin PostIn</PageTitle>
 
 <RadzenNotification />
+<RadzenDialog />
 
 <div class="mx-auto" style="max-width: 74em;">
 
@@ -233,7 +235,7 @@
                     <Template Context="d">
                         @{ var isCurrentUser = d.ID_Dipendente == currentUserId; }
                         <div class="d-flex align-items-center gap-3 py-1">
-                            <RadzenGravatar Email="@d.Username"
+                            <DiceBearAvatar Email="@d.Username"
                                            Style="width: 2.3em; height: 2.3em; border-radius: 0.5rem; flex-shrink: 0;" />
                             <div class="d-flex flex-column min-w-0">
                                 <div class="d-flex align-items-center gap-2">
@@ -335,12 +337,22 @@
 
                             <RadzenButton Icon="@(d.StatoAccount == 1 ? "block" : "check_circle")"
                                           Variant="Variant.Outlined"
-                                          ButtonStyle="@(d.StatoAccount == 1 ? ButtonStyle.Danger : ButtonStyle.Success)"
+                                          ButtonStyle="@(d.StatoAccount == 1 ? ButtonStyle.Warning : ButtonStyle.Success)"
                                           Size="ButtonSize.Small"
                                           Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
                                           Disabled="@(isActionLoading || isSelf)"
                                           Title="@(isSelf ? "Non puoi disabilitare il tuo account" : (d.StatoAccount == 1 ? "Disabilita account" : "Riattiva account"))"
                                           Click="() => ToggleStato(d)" />
+
+                            <!-- NUOVO BOTTONE PER ELIMINARE -->
+                            <RadzenButton Icon="delete"
+                                          Variant="Variant.Outlined"
+                                          ButtonStyle="ButtonStyle.Danger"
+                                          Size="ButtonSize.Small"
+                                          Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
+                                          Disabled="@(isActionLoading || isSelf)"
+                                          Title="@(isSelf ? "Non puoi eliminare il tuo account" : "Elimina account definitivamente")"
+                                          Click="() => EliminaUtente(d)" />
                         </div>
                     </Template>
                 </RadzenDataGridColumn>
@@ -605,6 +617,60 @@
                 Severity = NotificationSeverity.Error,
                 Summary = "Errore",
                 Detail = $"Impossibile aggiornare lo stato: {ex.Message}",
+                Duration = 3500
+            });
+        }
+        finally
+        {
+            isActionLoading = false;
+        }
+    }
+
+    private async Task EliminaUtente(Dipendente target)
+    {
+        if (isActionLoading || target.ID_Dipendente == currentUserId) return;
+        isActionLoading = true;
+
+        try
+        {
+            bool conferma = await DialogService.Confirm($"Sei sicuro di voler eliminare definitivamente l'utente {target.Nome} {target.Cognome} (@{target.Username})?", "Conferma Eliminazione", new ConfirmOptions() { OkButtonText = "Sì, Elimina", CancelButtonText = "Annulla" }) ?? false;
+            if (conferma)
+            {
+                // Verifica di vincoli di Foreign Key (se presenti, l'operazione fallirà e scatterà il catch)
+                DbContext.Dipendenti.Remove(target);
+                await DbContext.SaveChangesAsync();
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Utente Eliminato",
+                    Detail = $"L'account di {target.Nome} {target.Cognome} è stato rimosso con successo.",
+                    Duration = 3000
+                });
+
+                // Ricarica la lista per mostrare la tabella aggiornata
+                await CaricaDipendenti();
+                if (grid != null) await grid.Reload();
+            }
+        }
+        catch (DbUpdateException)
+        {
+            // Gestione dell'errore di integrità referenziale (DeleteBehavior.Restrict)
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore di Eliminazione",
+                Detail = "Impossibile eliminare l'utente. Potrebbe aver pubblicato articoli o commenti. Disabilita l'account invece di eliminarlo.",
+                Duration = 5000
+            });
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore",
+                Detail = $"Si è verificato un errore imprevisto: {ex.Message}",
                 Duration = 3500
             });
         }
