@@ -284,6 +284,7 @@
         {
             salvati = await DbContext.SalvataggiDaLeggere
                 .AsNoTracking()
+                .AsSplitQuery()
                 .Where(s => s.FK_Dipendente == currentUserId)
                 .Include(s => s.Articolo)
                     .ThenInclude(a => a!.Autore)

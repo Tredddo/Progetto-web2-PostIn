@@ -13,11 +13,19 @@ builder.Services.AddRazorComponents()
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<DialogService>();
 
+
+
+
 // Connessione Database (SQLite)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
                        ?? "Data Source=postin.db";
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite(connectionString));
+/*
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseSqlServer(connectionString) // o UseNpgsql / UseSqlite
+           .ConfigureWarnings(w => w.Throw(RelationalEventId.MultipleCollectionIncludeWarning))
+);*/
 
 // Autenticazione e Autorizzazione (Cookie)
 builder.Services.AddCascadingAuthenticationState();

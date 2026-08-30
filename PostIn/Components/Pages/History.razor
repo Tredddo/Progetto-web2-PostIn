@@ -83,13 +83,14 @@
                             var primaCategoria = articolo?.ArticoloCategorie?.FirstOrDefault()?.Categoria?.NomeCategoria;
 
                             <RadzenCard class="rz-shadow-sm p-3 history-card" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
-                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                                <!-- Rimosso flex-wrap per mantenere tutto su una riga orizzontale coerente -->
+                                <div class="d-flex justify-content-between align-items-center gap-3">
                                     
                                     <!-- Info Post & Autore -->
-                                    <div class="d-flex align-items-center gap-3 flex-grow-1 min-w-0">
+                                    <div class="d-flex align-items-center gap-3 flex-grow-1 min-w-0" style="min-width: 0;">
                                         <DiceBearAvatar Email="@articolo?.Autore?.Username" Style="width: 2.6em; height: 2.6em; border-radius: 0.55rem; flex-shrink: 0;" />
 
-                                        <div class="min-w-0">
+                                        <div class="min-w-0" style="min-width: 0; width: 100%;">
                                             <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
                                                 @if (!string.IsNullOrEmpty(primaCategoria))
                                                 {
@@ -102,7 +103,8 @@
                                                 </span>
                                             </div>
 
-                                            <h3 class="h6 fw-bold mb-0 text-truncate">
+                                            <!-- Il titolo ora viene troncato correttamente con i puntini (...) senza andare a capo -->
+                                            <h3 class="h6 fw-bold mb-0 text-truncate" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                                 <a href="/post/@item.FK_Articolo" class="text-dark text-decoration-none history-title-link">
                                                     @(articolo?.Titolo ?? "Post non disponibile")
                                                 </a>
@@ -110,20 +112,20 @@
                                         </div>
                                     </div>
 
-                                    <!-- Orario & Bottone Riapri -->
-                                    <div class="d-flex align-items-center gap-3 ms-auto flex-shrink-0">
+                                    <!-- Orario & Bottone Riapri (bloccati a destra senza andare a capo) -->
+                                    <div class="d-flex align-items-center gap-3 ms-3 flex-shrink-0" style="flex-shrink: 0;">
                                         <time datetime="@item.DataOraVisualizzazione.ToString("yyyy-MM-ddTHH:mm:ssZ")" class="text-muted small d-flex align-items-center gap-1" style="font-size: 0.78rem;">
                                             <RadzenIcon Icon="schedule" Style="font-size: 1em; color: #94a3b8;" />
                                             <span>@item.DataOraVisualizzazione.ToLocalTime().ToString("HH:mm")</span>
                                         </time>
 
                                         <RadzenButton Text="Rileggi"
-                                                      Icon="arrow_forward"
-                                                      Variant="Variant.Outlined"
-                                                      ButtonStyle="ButtonStyle.Primary"
-                                                      Size="ButtonSize.Small"
-                                                      Style="border-radius: 0.55rem; font-size: 0.78rem; padding: 0.25rem 0.65rem;"
-                                                      Click='() => NavigationManager.NavigateTo($"/post/{item.FK_Articolo}")' />
+                                                    Icon="arrow_forward"
+                                                    Variant="Variant.Outlined"
+                                                    ButtonStyle="ButtonStyle.Primary"
+                                                    Size="ButtonSize.Small"
+                                                    Style="border-radius: 0.55rem; font-size: 0.78rem; padding: 0.25rem 0.65rem;"
+                                                    Click='() => NavigationManager.NavigateTo($"/post/{item.FK_Articolo}")' />
                                     </div>
 
                                 </div>
@@ -186,6 +188,7 @@
         {
             cronologia = await DbContext.Visualizzazioni
                 .AsNoTracking()
+                .AsSplitQuery()
                 .Where(v => v.FK_Dipendente == userId)
                 .Include(v => v.Articolo)
                     .ThenInclude(a => a!.Autore)

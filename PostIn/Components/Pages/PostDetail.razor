@@ -363,6 +363,7 @@ else
         {
             articolo = await DbContext.Articoli
                 .AsNoTracking()
+                .AsSplitQuery()
                 .Include(a => a.Autore)
                 .Include(a => a.ArticoloCategorie).ThenInclude(ac => ac.Categoria)
                 .Include(a => a.Commenti).ThenInclude(c => c.Autore)

@@ -226,6 +226,7 @@
         {
             commenti = await DbContext.Commenti
                 .AsNoTracking()
+                .AsSplitQuery()
                 .Include(c => c.Autore)
                 .Include(c => c.Articolo)
                 .OrderByDescending(c => c.DataPubblicazione)

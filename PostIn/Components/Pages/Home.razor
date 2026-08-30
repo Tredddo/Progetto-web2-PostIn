@@ -253,6 +253,7 @@
 
             articoliTutti = await _context.Articoli
                 .AsNoTracking()
+                .AsSplitQuery()
                 .Include(a => a.Autore)
                 .Include(a => a.ArticoloCategorie)
                     .ThenInclude(ac => ac.Categoria)
