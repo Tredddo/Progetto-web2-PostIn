@@ -1,6 +1,7 @@
 @page "/admin/users"
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Authorize(Roles = "Admin")]
+@implements IDisposable
 @using Microsoft.EntityFrameworkCore
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authorization
@@ -8,10 +9,11 @@
 @using System.ComponentModel.DataAnnotations
 @using PostIn.Data
 @using PostIn.Data.Entities
+@using PostIn.Services
 @using Radzen
 @using Radzen.Blazor
 
-@inject ApplicationDbContext DbContext
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NotificationService NotificationService
 @inject DialogService DialogService
@@ -344,7 +346,6 @@
                                           Title="@(isSelf ? "Non puoi disabilitare il tuo account" : (d.StatoAccount == 1 ? "Disabilita account" : "Riattiva account"))"
                                           Click="() => ToggleStato(d)" />
 
-                            <!-- NUOVO BOTTONE PER ELIMINARE -->
                             <RadzenButton Icon="delete"
                                           Variant="Variant.Outlined"
                                           ButtonStyle="ButtonStyle.Danger"
@@ -367,6 +368,7 @@
     private bool isActionLoading = false;
     private bool mostraFormNuovoUtente = false;
     private int currentUserId = 0;
+    private CancellationTokenSource cts = new();
     
     private List<Dipendente> dipendenti = new();
     private List<Dipendente> dipendentiFiltrati = new();
@@ -414,13 +416,19 @@
         isLoading = true;
         try
         {
-            dipendenti = await DbContext.Dipendenti
+            using var context = await DbFactory.CreateDbContextAsync(cts.Token);
+
+            dipendenti = await context.Dipendenti
                 .AsNoTracking()
                 .OrderBy(d => d.Cognome)
                 .ThenBy(d => d.Nome)
-                .ToListAsync();
+                .ToListAsync(cts.Token);
 
             ApplicaFiltri();
+        }
+        catch (OperationCanceledException)
+        {
+            // Navigazione avvenuta prima del termine del caricamento
         }
         catch (Exception ex)
         {
@@ -487,7 +495,9 @@
 
         try
         {
-            var esiste = await DbContext.Dipendenti.AnyAsync(d => d.Username.ToLower() == usernamePuro);
+            using var context = await DbFactory.CreateDbContextAsync();
+
+            var esiste = await context.Dipendenti.AnyAsync(d => d.Username.ToLower() == usernamePuro);
             if (esiste)
             {
                 NotificationService.Notify(new NotificationMessage
@@ -511,8 +521,8 @@
                 UltimoAccesso = DateTime.UtcNow
             };
 
-            DbContext.Dipendenti.Add(nuovoDipendente);
-            await DbContext.SaveChangesAsync();
+            context.Dipendenti.Add(nuovoDipendente);
+            await context.SaveChangesAsync();
 
             NotificationService.Notify(new NotificationMessage
             {
@@ -551,9 +561,10 @@
 
         try
         {
+            using var context = await DbFactory.CreateDbContextAsync();
             var nuovoValoreRuolo = target.Ruolo == 1 ? 0 : 1;
 
-            await DbContext.Dipendenti
+            await context.Dipendenti
                 .Where(d => d.ID_Dipendente == target.ID_Dipendente)
                 .ExecuteUpdateAsync(s => s.SetProperty(d => d.Ruolo, nuovoValoreRuolo));
 
@@ -592,9 +603,10 @@
 
         try
         {
+            using var context = await DbFactory.CreateDbContextAsync();
             var nuovoStato = target.StatoAccount == 1 ? 0 : 1;
 
-            await DbContext.Dipendenti
+            await context.Dipendenti
                 .Where(d => d.ID_Dipendente == target.ID_Dipendente)
                 .ExecuteUpdateAsync(s => s.SetProperty(d => d.StatoAccount, nuovoStato));
 
@@ -633,12 +645,21 @@
 
         try
         {
-            bool conferma = await DialogService.Confirm($"Sei sicuro di voler eliminare definitivamente l'utente {target.Nome} {target.Cognome} (@{target.Username})?", "Conferma Eliminazione", new ConfirmOptions() { OkButtonText = "Sì, Elimina", CancelButtonText = "Annulla" }) ?? false;
+            bool conferma = await DialogService.Confirm(
+                $"Sei sicuro di voler eliminare definitivamente l'utente {target.Nome} {target.Cognome} (@{target.Username})?", 
+                "Conferma Eliminazione", 
+                new ConfirmOptions() { OkButtonText = "Sì, Elimina", CancelButtonText = "Annulla" }) ?? false;
+
             if (conferma)
             {
-                // Verifica di vincoli di Foreign Key (se presenti, l'operazione fallirà e scatterà il catch)
-                DbContext.Dipendenti.Remove(target);
-                await DbContext.SaveChangesAsync();
+                using var context = await DbFactory.CreateDbContextAsync();
+
+                await context.Dipendenti
+                    .Where(d => d.ID_Dipendente == target.ID_Dipendente)
+                    .ExecuteDeleteAsync();
+
+                dipendenti.Remove(target);
+                dipendentiFiltrati.Remove(target);
 
                 NotificationService.Notify(new NotificationMessage
                 {
@@ -648,19 +669,16 @@
                     Duration = 3000
                 });
 
-                // Ricarica la lista per mostrare la tabella aggiornata
-                await CaricaDipendenti();
                 if (grid != null) await grid.Reload();
             }
         }
         catch (DbUpdateException)
         {
-            // Gestione dell'errore di integrità referenziale (DeleteBehavior.Restrict)
             NotificationService.Notify(new NotificationMessage
             {
                 Severity = NotificationSeverity.Error,
                 Summary = "Errore di Eliminazione",
-                Detail = "Impossibile eliminare l'utente. Potrebbe aver pubblicato articoli o commenti. Disabilita l'account invece di eliminarlo.",
+                Detail = "Impossibile eliminare l'utente perché è autore di articoli o commenti. Disabilita l'account invece di eliminarlo.",
                 Duration = 5000
             });
         }
@@ -678,6 +696,12 @@
         {
             isActionLoading = false;
         }
+    }
+
+    public void Dispose()
+    {
+        cts.Cancel();
+        cts.Dispose();
     }
 
     public class NuovoUtenteModel

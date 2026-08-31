@@ -1,7 +1,8 @@
 @page "/create-post"
 @page "/edit-post/{Id:int}"
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Authorize]
+@implements IDisposable
 @using Microsoft.EntityFrameworkCore
 @using System.Security.Claims
 @using System.ComponentModel.DataAnnotations
@@ -13,7 +14,8 @@
 @using PostIn.Components.Shared.Profile
 @using Radzen
 @using Radzen.Blazor
-@inject ApplicationDbContext DbContext
+
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
@@ -187,13 +189,13 @@
     private bool isPageLoading = true;
     private bool isSaving = false;
     private bool showPreview = false;
+    private CancellationTokenSource cts = new();
 
     private ArticoloFormModel formModel = new();
     private List<Categoria> categorie = new();
     private HashSet<int> categorieSelezionate = new();
     private int currentUserId = 0;
 
-    // Gestione Immagine In-Memory (nessun salvataggio fino al submit)
     private string? previewImageUrl;
     private CoverImageUploader.ImageData? pendingImage;
     private bool isImageExplicitlyRemoved = false;
@@ -205,37 +207,52 @@
         var userIdClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         int.TryParse(userIdClaim, out currentUserId);
 
-        categorie = await DbContext.Categorie.AsNoTracking().OrderBy(c => c.NomeCategoria).ToListAsync();
-
-        if (isEditMode)
+        try
         {
-            var articolo = await DbContext.Articoli
-                .Include(a => a.ArticoloCategorie)
-                .FirstOrDefaultAsync(a => a.ID_Articolo == Id!.Value);
+            using var context = await DbFactory.CreateDbContextAsync(cts.Token);
 
-            if (articolo != null)
+            categorie = await context.Categorie
+                .AsNoTracking()
+                .OrderBy(c => c.NomeCategoria)
+                .ToListAsync(cts.Token);
+
+            if (isEditMode)
             {
-                var ruoloClaim = authState.User.FindFirst(ClaimTypes.Role)?.Value;
-                if (articolo.FK_Autore != currentUserId && ruoloClaim != "Admin" && ruoloClaim != "Amministratore")
+                var articolo = await context.Articoli
+                    .AsNoTracking()
+                    .Include(a => a.ArticoloCategorie)
+                    .FirstOrDefaultAsync(a => a.ID_Articolo == Id!.Value, cts.Token);
+
+                if (articolo != null)
+                {
+                    var ruoloClaim = authState.User.FindFirst(ClaimTypes.Role)?.Value;
+                    if (articolo.FK_Autore != currentUserId && ruoloClaim != "Admin" && ruoloClaim != "Amministratore")
+                    {
+                        NavigationManager.NavigateTo(DestinazioneRitorno);
+                        return;
+                    }
+
+                    formModel.Titolo = articolo.Titolo;
+                    formModel.CorpoTesto = articolo.CorpoTesto;
+                    originalImagePath = articolo.ImmagineCopertina;
+                    previewImageUrl = articolo.ImmagineCopertina;
+                    categorieSelezionate = articolo.ArticoloCategorie.Select(ac => ac.FK_Categoria).ToHashSet();
+                }
+                else
                 {
                     NavigationManager.NavigateTo(DestinazioneRitorno);
                     return;
                 }
-
-                formModel.Titolo = articolo.Titolo;
-                formModel.CorpoTesto = articolo.CorpoTesto;
-                originalImagePath = articolo.ImmagineCopertina;
-                previewImageUrl = articolo.ImmagineCopertina;
-                categorieSelezionate = articolo.ArticoloCategorie.Select(ac => ac.FK_Categoria).ToHashSet();
-            }
-            else
-            {
-                NavigationManager.NavigateTo(DestinazioneRitorno);
-                return;
             }
         }
-
-        isPageLoading = false;
+        catch (OperationCanceledException)
+        {
+            // Navigazione annullata al cambio pagina
+        }
+        finally
+        {
+            isPageLoading = false;
+        }
     }
 
     private void HandleImageChanged(CoverImageUploader.ImageData? data)
@@ -290,7 +307,6 @@
         {
             string? finalImagePath = isEditMode ? originalImagePath : null;
 
-            // Salvataggio differito nella cartella protetta Uploads/Covers
             if (pendingImage != null)
             {
                 var uploadsFolder = Path.Combine(Environment.ContentRootPath, "Uploads", "Covers");
@@ -320,10 +336,11 @@
                 finalImagePath = null;
             }
 
-            // Salvataggio a Database
+            using var context = await DbFactory.CreateDbContextAsync();
+
             if (isEditMode)
             {
-                var articolo = await DbContext.Articoli
+                var articolo = await context.Articoli
                     .Include(a => a.ArticoloCategorie)
                     .FirstOrDefaultAsync(a => a.ID_Articolo == Id!.Value);
 
@@ -343,17 +360,17 @@
                 articolo.CorpoTesto = formModel.CorpoTesto.Trim();
                 articolo.ImmagineCopertina = finalImagePath;
 
-                DbContext.ArticoloCategorie.RemoveRange(articolo.ArticoloCategorie);
+                context.ArticoloCategorie.RemoveRange(articolo.ArticoloCategorie);
                 foreach (var catId in categorieSelezionate)
                 {
-                    DbContext.ArticoloCategorie.Add(new ArticoloCategoria 
+                    context.ArticoloCategorie.Add(new ArticoloCategoria 
                     { 
                         FK_Articolo = articolo.ID_Articolo, 
                         FK_Categoria = catId 
                     });
                 }
 
-                await DbContext.SaveChangesAsync();
+                await context.SaveChangesAsync();
 
                 NotificationService.Notify(new NotificationMessage
                 {
@@ -363,7 +380,6 @@
                     Duration = 2500
                 });
 
-                await Task.Delay(350);
                 NavigationManager.NavigateTo($"/post/{Id!.Value}");
             }
             else
@@ -377,18 +393,18 @@
                     FK_Autore = currentUserId
                 };
 
-                DbContext.Articoli.Add(nuovoArticolo);
-                await DbContext.SaveChangesAsync();
+                context.Articoli.Add(nuovoArticolo);
+                await context.SaveChangesAsync();
 
                 foreach (var catId in categorieSelezionate)
                 {
-                    DbContext.ArticoloCategorie.Add(new ArticoloCategoria 
+                    context.ArticoloCategorie.Add(new ArticoloCategoria 
                     { 
                         FK_Articolo = nuovoArticolo.ID_Articolo, 
                         FK_Categoria = catId 
                     });
                 }
-                await DbContext.SaveChangesAsync();
+                await context.SaveChangesAsync();
 
                 NotificationService.Notify(new NotificationMessage
                 {
@@ -398,7 +414,6 @@
                     Duration = 2500
                 });
 
-                await Task.Delay(350);
                 NavigationManager.NavigateTo($"/post/{nuovoArticolo.ID_Articolo}");
             }
         }
@@ -438,6 +453,12 @@
                 Console.WriteLine($"[AVVISO PULIZIA FILE]: {ex.Message}");
             }
         }
+    }
+
+    public void Dispose()
+    {
+        cts.Cancel();
+        cts.Dispose();
     }
 
     public class ArticoloFormModel

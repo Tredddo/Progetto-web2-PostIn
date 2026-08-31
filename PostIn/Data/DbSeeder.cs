@@ -1,17 +1,20 @@
 using Bogus;
 using Microsoft.EntityFrameworkCore;
 using PostIn.Data.Entities;
+using PostIn.Services;
 
 namespace PostIn.Data;
 
 public static class DbSeeder
 {
+    private const int MAX_COMMENTS_TO_SEED = 150;
+
     public static async Task SeedAsync(ApplicationDbContext context)
     {
         if (await context.Dipendenti.AnyAsync())
             return;
 
-        // Imposta un seed fisso per avere sempre gli stessi dati a ogni reset (opzionale)
+        // Imposta un seed fisso per avere sempre gli stessi dati a ogni reset
         Randomizer.Seed = new Random(42);
 
         // DIPENDENTI (Fissi + Generati con Bogus)
@@ -74,8 +77,7 @@ public static class DbSeeder
         var articoloFaker = new Faker<Articolo>("it")
             .RuleFor(a => a.Titolo, f => f.Rant.Review("lavoro").Length > 80 ? f.Lorem.Sentence(6) : f.Rant.Review("lavoro"))
             .RuleFor(a => a.CorpoTesto, f => string.Join("\n\n", f.Lorem.Paragraphs(3, 6)))
-            // Genera avatar/immagini con DiceBear o placeholder
-            .RuleFor(a => a.ImmagineCopertina, _ => null) // Nessuna immagine
+            .RuleFor(a => a.ImmagineCopertina, _ => null)
             .RuleFor(a => a.DataOraCreazione, f => f.Date.Past(1))
             .RuleFor(a => a.FK_Autore, f => f.PickRandom(dipendentiIds));
 
@@ -87,7 +89,7 @@ public static class DbSeeder
         var articoliIds = articoli.Select(a => a.ID_Articolo).ToList();
 
         // TABELLE DI JOIN & RELAZIONI
-        var random = new Random();
+        var random = new Random(42);
 
         // Assegnazione Categorie agli Articoli (1-3 categorie per articolo, univoche)
         var articoloCategorie = new List<ArticoloCategoria>();
@@ -170,23 +172,75 @@ public static class DbSeeder
             }
         }
 
-        // COMMENTI & VISUALIZZAZIONI
-        var commentoFaker = new Faker<Commento>("it")
-            .RuleFor(c => c.FK_Autore, f => f.PickRandom(dipendentiIds))
-            .RuleFor(c => c.FK_Articolo, f => f.PickRandom(articoliIds))
-            .RuleFor(c => c.TestoCommento, f => f.Rant.Review("lavoro") ?? f.Lorem.Sentence(10))
-            .RuleFor(c => c.DataPubblicazione, f => f.Date.Recent(60));
+        // COMMENTI DA FILE comments.txt (Limitati a MAX_COMMENTS_TO_SEED)
+        string filePath = Path.Combine(AppContext.BaseDirectory, "comments.txt");
+        if (!File.Exists(filePath))
+        {
+            filePath = Path.Combine(Directory.GetCurrentDirectory(), "comments.txt");
+        }
 
-        context.Commenti.AddRange(commentoFaker.Generate(300)); // 300 commenti casuali
+        if (File.Exists(filePath))
+        {
+            var righeCommenti = (await File.ReadAllLinesAsync(filePath))
+                .Where(l => !string.IsNullOrWhiteSpace(l))
+                .Select(l => l.Trim())
+                .Distinct()
+                .Take(MAX_COMMENTS_TO_SEED)
+                .ToList();
 
+            var commentiDaSalvare = new List<Commento>();
+            var randomSeed = new Random(42);
+
+            for (int i = 0; i < righeCommenti.Count; i++)
+            {
+                int artId = articoliIds[i % articoliIds.Count]; 
+                int dipId = dipendentiIds[randomSeed.Next(dipendentiIds.Count)];
+
+                commentiDaSalvare.Add(new Commento
+                {
+                    FK_Articolo = artId,
+                    FK_Autore = dipId,
+                    TestoCommento = righeCommenti[i],
+                    DataPubblicazione = DateTime.UtcNow.AddMinutes(-randomSeed.Next(1, 43200)),
+                    Sentiment = "Da analizzare",
+                    PositiveScore = 0.0,
+                    NeutralScore = 0.0,
+                    NegativeScore = 0.0
+                });
+            }
+
+            if (commentiDaSalvare.Any())
+            {
+                context.Commenti.AddRange(commentiDaSalvare);
+                await context.SaveChangesAsync();
+            }
+        }
+        else
+        {
+            // Fallback con Bogus se il file comments.txt non viene trovato
+            var commentoFaker = new Faker<Commento>("it")
+                .RuleFor(c => c.FK_Autore, f => f.PickRandom(dipendentiIds))
+                .RuleFor(c => c.FK_Articolo, f => f.PickRandom(articoliIds))
+                .RuleFor(c => c.TestoCommento, f => f.Rant.Review("lavoro") ?? f.Lorem.Sentence(10))
+                .RuleFor(c => c.DataPubblicazione, f => f.Date.Recent(60))
+                .RuleFor(c => c.Sentiment, _ => "Da analizzare")
+                .RuleFor(c => c.PositiveScore, _ => 0.0)
+                .RuleFor(c => c.NeutralScore, _ => 0.0)
+                .RuleFor(c => c.NegativeScore, _ => 0.0);
+
+            context.Commenti.AddRange(commentoFaker.Generate(MAX_COMMENTS_TO_SEED));
+            await context.SaveChangesAsync();
+        }
+
+        // VISUALIZZAZIONI
         var visualizzazioneFaker = new Faker<Visualizzazione>("it")
             .RuleFor(v => v.FK_Dipendente, f => f.PickRandom(dipendentiIds))
             .RuleFor(v => v.FK_Articolo, f => f.PickRandom(articoliIds))
             .RuleFor(v => v.DataOraVisualizzazione, f => f.Date.Recent(30));
 
-        context.Visualizzazioni.AddRange(visualizzazioneFaker.Generate(800)); // 800 views
+        context.Visualizzazioni.AddRange(visualizzazioneFaker.Generate(800));
 
-        // Salvataggio finale di tutte le relazioni, commenti e visualizzazioni
+        // Salvataggio finale di tutte le relazioni e visualizzazioni
         await context.SaveChangesAsync();
     }
 }

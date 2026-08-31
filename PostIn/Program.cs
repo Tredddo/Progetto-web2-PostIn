@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PostIn.Components;
 using PostIn.Data;
 using PostIn.Endpoints;
+using PostIn.Services;
 using Radzen;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,19 +14,24 @@ builder.Services.AddRazorComponents()
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<DialogService>();
 
+// Registrazione Servizio Sentiment Azure AI
+builder.Services.AddSingleton<SentimentService>();
 
+// Connessione Database (SQL Server con Factory per concorrenza Blazor e Resilienza Azure)
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
+builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
+    options.UseSqlServer(connectionString, sqlServerOptionsAction: sqlOptions =>
+    {
+        sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorNumbersToAdd: null);
+    }));
 
-// Connessione Database (SQLite)
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
-                       ?? "Data Source=postin.db";
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(connectionString));
-/*
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString) // o UseNpgsql / UseSqlite
-           .ConfigureWarnings(w => w.Throw(RelationalEventId.MultipleCollectionIncludeWarning))
-);*/
+// Mantiene compatibilità per i componenti e servizi che usano @inject ApplicationDbContext
+builder.Services.AddScoped(sp => 
+    sp.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext());
 
 // Autenticazione e Autorizzazione (Cookie)
 builder.Services.AddCascadingAuthenticationState();
@@ -56,7 +62,7 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
-    app.UseHttpsRedirection(); // Solo in produzione per evitare warning locali
+    app.UseHttpsRedirection();
 }
 
 app.UseAuthentication();
@@ -64,7 +70,7 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 // Registrazione Endpoint e Componenti
-app.MapCoverEndpoints(); // Endpoint protetto
+app.MapCoverEndpoints();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

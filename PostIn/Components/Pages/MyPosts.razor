@@ -1,6 +1,7 @@
 @page "/my-posts"
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Authorize]
+@implements IDisposable
 @using Microsoft.EntityFrameworkCore
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Components.Authorization
@@ -8,7 +9,8 @@
 @using PostIn.Data.Entities
 @using Radzen
 @using Radzen.Blazor
-@inject ApplicationDbContext DbContext
+
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
@@ -115,6 +117,7 @@
     private bool isActionLoading = false;
     private int deletingArticleId = 0;
     private int currentUserId = 0;
+    private CancellationTokenSource cts = new();
     private List<Articolo> mieiArticoli = new();
 
     protected override async Task OnInitializedAsync()
@@ -131,10 +134,17 @@
         isLoading = true;
         try
         {
-            mieiArticoli = await DbContext.Articoli
+            using var context = await DbFactory.CreateDbContextAsync(cts.Token);
+
+            mieiArticoli = await context.Articoli
+                .AsNoTracking()
                 .Where(a => a.FK_Autore == currentUserId)
                 .OrderByDescending(a => a.DataOraCreazione)
-                .ToListAsync();
+                .ToListAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Navigazione annullata al cambio pagina
         }
         finally
         {
@@ -150,24 +160,23 @@
 
         try
         {
-            var categorie = DbContext.ArticoloCategorie.Where(ac => ac.FK_Articolo == articoloId);
-            DbContext.ArticoloCategorie.RemoveRange(categorie);
+            using var context = await DbFactory.CreateDbContextAsync();
 
-            var art = await DbContext.Articoli.FindAsync(articoloId);
-            if (art != null)
+            await context.Articoli
+                .Where(a => a.ID_Articolo == articoloId && a.FK_Autore == currentUserId)
+                .ExecuteDeleteAsync();
+
+            mieiArticoli.RemoveAll(a => a.ID_Articolo == articoloId);
+
+            NotificationService.Notify(new NotificationMessage
             {
-                DbContext.Articoli.Remove(art);
-                await DbContext.SaveChangesAsync();
-                mieiArticoli.RemoveAll(a => a.ID_Articolo == articoloId);
+                Severity = NotificationSeverity.Success,
+                Summary = "Articolo Eliminato",
+                Detail = "L'articolo è stato rimosso con successo.",
+                Duration = 2500
+            });
 
-                NotificationService.Notify(new NotificationMessage
-                {
-                    Severity = NotificationSeverity.Success,
-                    Summary = "Articolo Eliminato",
-                    Detail = "L'articolo è stato rimosso con successo.",
-                    Duration = 2500
-                });
-            }
+            StateHasChanged();
         }
         catch (Exception ex)
         {
@@ -184,5 +193,11 @@
             isActionLoading = false;
             deletingArticleId = 0;
         }
+    }
+
+    public void Dispose()
+    {
+        cts.Cancel();
+        cts.Dispose();
     }
 }

@@ -10,6 +10,11 @@ public class Commento
     public Dipendente Autore { get; set; } = null!;
 
     public string TestoCommento { get; set; } = string.Empty;
-    //public string DataPubblicazione { get: set; } = string.Empty;
     public DateTime DataPubblicazione { get; set; } = DateTime.UtcNow;
+
+    // Colonne per Sentiment Analysis con Azure AI
+    public string Sentiment { get; set; } = "Neutral";
+    public double PositiveScore { get; set; }
+    public double NeutralScore { get; set; }
+    public double NegativeScore { get; set; }
 }

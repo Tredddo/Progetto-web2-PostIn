@@ -1,6 +1,7 @@
 @page "/post/{Id:int}"
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Authorize]
+@implements IDisposable
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
 @using System.Security.Claims
@@ -10,11 +11,12 @@
 @using Radzen
 @using Radzen.Blazor
 
-@inject ApplicationDbContext DbContext
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
 @inject IJSRuntime JSRuntime
+@inject PostIn.Services.SentimentService SentimentService
 
 <PageTitle>@(articolo?.Titolo ?? "Caricamento Articolo") - PostIn</PageTitle>
 
@@ -141,7 +143,7 @@ else
 
                     <div class="d-flex align-items-center gap-1.5 text-muted small bg-light px-3 py-1.5 rounded-pill border">
                         <RadzenIcon Icon="visibility" Style="font-size: 1.1em;" />
-                        <span class="fw-medium">@articolo.Visualizzazioni.Count @(articolo.Visualizzazioni.Count == 1 ? "visualizzazione" : "visualizzazioni")</span>
+                        <span class="fw-medium">@visualizzazioniCount @(visualizzazioniCount == 1 ? "visualizzazione" : "visualizzazioni")</span>
                     </div>
                 </div>
 
@@ -153,7 +155,7 @@ else
             <div class="p-2 p-md-3">
                 <h2 id="commenti-heading" class="h5 fw-bold mb-4 d-flex align-items-center gap-2 text-dark">
                     <RadzenIcon Icon="forum" Style="font-size: 1.2em; color: #6366f1;" />
-                    Commenti (@articolo.Commenti.Count)
+                    Commenti (@(articolo.Commenti?.Count ?? 0))
                 </h2>
 
                 <!-- Form nuovo commento -->
@@ -184,7 +186,7 @@ else
                 }
 
                 <!-- Lista commenti -->
-                @if (!articolo.Commenti.Any())
+                @if (articolo.Commenti == null || !articolo.Commenti.Any())
                 {
                     <div class="text-center py-5 text-muted bg-light rounded-3 border border-dashed">
                         <RadzenIcon Icon="chat_bubble_outline" Style="font-size: 2.5em; color: #cbd5e1;" class="d-block mx-auto mb-2" />
@@ -200,11 +202,16 @@ else
                             <div class="d-flex gap-3">
                                 <DiceBearAvatar Email="@commento.Autore?.Username" Style="width: 2.6em; height: 2.6em; border-radius: 0.55rem; flex-shrink: 0;" />
                                 
-                                <div class="flex-grow-1 bg-light p-3 rounded-3 border">
+                                <div class="flex-grow-1 bg-light p-3 rounded-3 border @GetSentimentBorder(commento.Sentiment)">
                                     <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
-                                        <span class="fw-bold text-dark small">
-                                            @(commento.Autore != null ? $"{commento.Autore.Nome} {commento.Autore.Cognome}" : "Anonimo")
-                                        </span>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="fw-bold text-dark small">
+                                                @(commento.Autore != null ? $"{commento.Autore.Nome} {commento.Autore.Cognome}" : "Anonimo")
+                                            </span>
+                                            <span class="badge @GetSentimentBadge(commento.Sentiment)" style="font-size: 0.7rem;">
+                                                @commento.Sentiment
+                                            </span>
+                                        </div>
                                         <time class="text-muted" style="font-size: 0.75rem;">
                                             @commento.DataPubblicazione.ToLocalTime().ToString("dd MMM yyyy, HH:mm")
                                         </time>
@@ -225,12 +232,11 @@ else
 
 <style>
     .article-body { 
-            /* Stack di font moderni, puliti e nativi per ogni sistema operativo */
-            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            color: #334155; /* Grigio scuro morbido, stanca meno la vista rispetto al nero puro */
-            line-height: 1.75; /* Spaziatura generosa tra le righe per facilitare la lettura */
-            letter-spacing: 0.01em;
-        }
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        color: #334155;
+        line-height: 1.75;
+        letter-spacing: 0.01em;
+    }
 
     .category-badge {
         background-color: #f1f5f9;
@@ -253,20 +259,17 @@ else
         box-shadow: 0 0 0 0.25rem rgba(99, 102, 241, 0.25);
     }
 
-    /* Pulsanti Interattivi Stondati */
     .action-rect-btn {
         border-radius: 0.65rem !important;
         font-size: 0.9rem;
     }
 
-    /* Stile Like Attivo */
     .btn-like-active {
         background-color: #fee2e2 !important;
         color: #b91c1c !important;
         border: 1px solid #fca5a5 !important;
     }
 
-    /* Stile Bookmark Attivo (Giallo / Ambra) */
     .btn-bookmark-active {
         background-color: #fef3c7 !important;
         color: #b45309 !important;
@@ -291,17 +294,18 @@ else
     private bool isLoading = true;
     private bool isActionLoading = false;
     private int currentUserId = 0;
+    private CancellationTokenSource cts = new();
     
     private bool haLiked = false;
     private bool haSalvato = false;
     private int likeCount = 0;
+    private int visualizzazioniCount = 0;
     private string nuovoCommento = string.Empty;
 
     private int _lastLoadedId = 0;
     private bool _scrollToComments = false;
     private bool _shouldScrollToTop = false;
 
-    // INIZIALIZZAZIONE (Eseguito 1 sola volta all'apertura del componente)
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -309,18 +313,16 @@ else
         int.TryParse(userIdClaim, out currentUserId);
     }
 
-    // GESTIONE PARAMETRI (Eseguito all'avvio e ad ogni cambio di rotte es. da /post/1 a /post/2)
     protected override async Task OnParametersSetAsync()
     {
-        // Ricarica i dati solo se l'ID è effettivamente cambiato o è il primo caricamento
         if (Id != _lastLoadedId)
         {
             _lastLoadedId = Id;
             
-            // Reset stati reattivi
             haLiked = false;
             haSalvato = false;
             likeCount = 0;
+            visualizzazioniCount = 0;
             nuovoCommento = string.Empty;
             _shouldScrollToTop = true;
 
@@ -329,10 +331,8 @@ else
         }
     }
 
-    // POST-RENDERING DOM (Eseguito solo quando il DOM HTML è pronto)
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Gestione Scroll automatico in cima quando cambia post
         if (_shouldScrollToTop)
         {
             _shouldScrollToTop = false;
@@ -340,10 +340,9 @@ else
             {
                 await JSRuntime.InvokeVoidAsync("window.scrollTo", 0, 0);
             }
-            catch { /* Ignora se JS non disponibile */ }
+            catch { }
         }
 
-        // Gestione Scroll verso i commenti appena pubblicati
         if (_scrollToComments)
         {
             _scrollToComments = false;
@@ -352,7 +351,7 @@ else
                 await JSRuntime.InvokeVoidAsync("eval", 
                     "document.getElementById('commenti-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' });");
             }
-            catch { /* Ignora se elemento assente */ }
+            catch { }
         }
     }
 
@@ -361,24 +360,35 @@ else
         isLoading = true;
         try
         {
-            articolo = await DbContext.Articoli
+            using var context = await DbFactory.CreateDbContextAsync(cts.Token);
+
+            articolo = await context.Articoli
                 .AsNoTracking()
-                .AsSplitQuery()
                 .Include(a => a.Autore)
                 .Include(a => a.ArticoloCategorie).ThenInclude(ac => ac.Categoria)
                 .Include(a => a.Commenti).ThenInclude(c => c.Autore)
-                .Include(a => a.Visualizzazioni)
                 .Include(a => a.Likes)
-                .AsSplitQuery()
-                .FirstOrDefaultAsync(a => a.ID_Articolo == Id);
+                .FirstOrDefaultAsync(a => a.ID_Articolo == Id, cts.Token);
 
-            if (articolo != null && currentUserId > 0)
+            if (articolo != null)
             {
-                haLiked = articolo.Likes.Any(d => d.ID_Dipendente == currentUserId);
-                haSalvato = await DbContext.SalvataggiDaLeggere
-                    .AnyAsync(s => s.FK_Dipendente == currentUserId && s.FK_Articolo == Id);
+                visualizzazioniCount = await context.Visualizzazioni
+                    .AsNoTracking()
+                    .CountAsync(v => v.FK_Articolo == Id, cts.Token);
+
+                if (currentUserId > 0)
+                {
+                    haLiked = articolo.Likes.Any(d => d.ID_Dipendente == currentUserId);
+                    haSalvato = await context.SalvataggiDaLeggere
+                        .AsNoTracking()
+                        .AnyAsync(s => s.FK_Dipendente == currentUserId && s.FK_Articolo == Id, cts.Token);
+                }
                 likeCount = articolo.Likes.Count;
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // Navigazione interrotta
         }
         catch (Exception ex)
         {
@@ -401,15 +411,18 @@ else
         if (currentUserId <= 0 || articolo == null) return;
         try
         {
-            DbContext.Visualizzazioni.Add(new Visualizzazione
+            using var context = await DbFactory.CreateDbContextAsync();
+            context.Visualizzazioni.Add(new Visualizzazione
             {
                 FK_Dipendente = currentUserId,
                 FK_Articolo = Id,
                 DataOraVisualizzazione = DateTime.UtcNow
             });
-            await DbContext.SaveChangesAsync();
+            await context.SaveChangesAsync();
+            visualizzazioniCount++;
+            StateHasChanged();
         }
-        catch { /* Ignora duplicazioni da double-click rapido */ }
+        catch { }
     }
 
     private async Task ToggleLike()
@@ -419,18 +432,20 @@ else
 
         try
         {
-            var like = await DbContext.Likes
+            using var context = await DbFactory.CreateDbContextAsync();
+
+            var like = await context.Likes
                 .FirstOrDefaultAsync(l => l.FK_Dipendente == currentUserId && l.FK_Articolo == Id);
 
             if (like != null)
             {
-                DbContext.Likes.Remove(like);
+                context.Likes.Remove(like);
                 haLiked = false;
                 likeCount--;
             }
             else
             {
-                DbContext.Likes.Add(new Like
+                context.Likes.Add(new Like
                 {
                     FK_Dipendente = currentUserId,
                     FK_Articolo = Id,
@@ -440,7 +455,7 @@ else
                 likeCount++;
             }
             
-            await DbContext.SaveChangesAsync();
+            await context.SaveChangesAsync();
         }
         catch (Exception ex)
         {
@@ -465,12 +480,14 @@ else
 
         try
         {
-            var salvataggio = await DbContext.SalvataggiDaLeggere
+            using var context = await DbFactory.CreateDbContextAsync();
+
+            var salvataggio = await context.SalvataggiDaLeggere
                 .FirstOrDefaultAsync(s => s.FK_Dipendente == currentUserId && s.FK_Articolo == Id);
 
             if (salvataggio != null)
             {
-                DbContext.SalvataggiDaLeggere.Remove(salvataggio);
+                context.SalvataggiDaLeggere.Remove(salvataggio);
                 haSalvato = false;
 
                 NotificationService.Notify(new NotificationMessage
@@ -483,7 +500,7 @@ else
             }
             else
             {
-                DbContext.SalvataggiDaLeggere.Add(new SalvataggioDaLeggere
+                context.SalvataggiDaLeggere.Add(new SalvataggioDaLeggere
                 {
                     FK_Dipendente = currentUserId,
                     FK_Articolo = Id,
@@ -500,7 +517,7 @@ else
                 });
             }
             
-            await DbContext.SaveChangesAsync();
+            await context.SaveChangesAsync();
         }
         catch (Exception ex)
         {
@@ -525,24 +542,31 @@ else
 
         try
         {
-            DbContext.Commenti.Add(new Commento
+            using var context = await DbFactory.CreateDbContextAsync();
+
+            var commento = new Commento
             {
                 FK_Autore = currentUserId,
                 FK_Articolo = Id,
                 TestoCommento = nuovoCommento.Trim(),
-                DataPubblicazione = DateTime.UtcNow
-            });
-            
-            await DbContext.SaveChangesAsync();
-            
+                DataPubblicazione = DateTime.UtcNow,
+                Sentiment = "Da analizzare",
+                PositiveScore = 0.0,
+                NeutralScore = 0.0,
+                NegativeScore = 0.0
+            };
+
+            context.Commenti.Add(commento);
+            await context.SaveChangesAsync();
+
             nuovoCommento = string.Empty;
-            _scrollToComments = true; // Notifica a OnAfterRenderAsync di scorrere ai commenti
+            _scrollToComments = true;
 
             NotificationService.Notify(new NotificationMessage
             {
                 Severity = NotificationSeverity.Success,
                 Summary = "Commento Pubblicato",
-                Detail = "Il tuo commento è stato aggiunto con successo.",
+                Detail = "Il tuo commento è stato pubblicato con successo.",
                 Duration = 2500
             });
 
@@ -562,5 +586,28 @@ else
         {
             isActionLoading = false;
         }
+    }
+
+    private string GetSentimentBadge(string? sentiment) => (sentiment?.ToLower()) switch
+    {
+        "positive" => "bg-success",
+        "neutral" => "bg-secondary",
+        "negative" => "bg-danger",
+        "mixed" => "bg-warning text-dark",
+        _ => "bg-info text-dark"
+    };
+
+    private string GetSentimentBorder(string? sentiment) => (sentiment?.ToLower()) switch
+    {
+        "positive" => "border-start border-success border-3",
+        "negative" => "border-start border-danger border-3",
+        "mixed" => "border-start border-warning border-3",
+        _ => ""
+    };
+
+    public void Dispose()
+    {
+        cts.Cancel();
+        cts.Dispose();
     }
 }

@@ -1,6 +1,7 @@
 @page "/admin/posts"
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Authorize(Roles = "Admin")]
+@implements IDisposable
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Authorization
 @using PostIn.Data
@@ -8,7 +9,7 @@
 @using Radzen
 @using Radzen.Blazor
 
-@inject ApplicationDbContext DbContext
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
 @inject DialogService DialogService
@@ -121,7 +122,7 @@
     <RadzenCard class="rz-shadow-sm p-0 mb-5 overflow-hidden" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
         <RadzenDataGrid @ref="grid"
                         Data="@articoliFiltrati"
-                        TItem="Articolo"
+                        TItem="AdminArticoloViewModel"
                         IsLoading="@isLoading"
                         AllowSorting="true"
                         AllowPaging="true"
@@ -134,7 +135,7 @@
             <Columns>
 
                 <!-- Articolo -->
-                <RadzenDataGridColumn TItem="Articolo" Property="Titolo" Title="Articolo" MinWidth="220px">
+                <RadzenDataGridColumn TItem="AdminArticoloViewModel" Property="Titolo" Title="Articolo" MinWidth="220px">
                     <Template Context="art">
                         <div class="d-flex align-items-center gap-2 py-1">
                             @if (!string.IsNullOrWhiteSpace(art.ImmagineCopertina))
@@ -154,8 +155,8 @@
                             }
                             <div class="min-w-0">
                                 <a href="/post/@art.ID_Articolo"
-                                   class="fw-semibold text-dark text-decoration-none admin-post-link d-block"
-                                   style="font-size: 0.87rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 15rem;"
+                                   class="fw-semibold text-dark text-decoration-none admin-post-link d-block text-truncate"
+                                   style="font-size: 0.87rem; max-width: 15rem;"
                                    title="@art.Titolo">@art.Titolo</a>
                                 <span class="text-muted" style="font-size: 0.72rem;">ID #@art.ID_Articolo</span>
                             </div>
@@ -164,33 +165,33 @@
                 </RadzenDataGridColumn>
 
                 <!-- Autore -->
-                <RadzenDataGridColumn TItem="Articolo" Property="Autore.Cognome" Title="Autore" MinWidth="160px">
+                <RadzenDataGridColumn TItem="AdminArticoloViewModel" Property="AutoreCognome" Title="Autore" MinWidth="160px">
                     <Template Context="art">
                         <div class="d-flex align-items-center gap-2">
-                            <DiceBearAvatar Email="@art.Autore?.Username"
+                            <DiceBearAvatar Email="@art.AutoreUsername"
                                            Style="width: 2.2em; height: 2.2em; border-radius: 0.45rem; flex-shrink: 0;" />
                             <div class="min-w-0">
-                                <span class="fw-semibold d-block text-dark" style="font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 11rem;">
-                                    @art.Autore?.Nome @art.Autore?.Cognome
+                                <span class="fw-semibold d-block text-dark text-truncate" style="font-size: 0.85rem; max-width: 11rem;">
+                                    @art.AutoreNomeCompleto
                                 </span>
-                                <span class="text-muted" style="font-size: 0.72rem;">@@@art.Autore?.Username</span>
+                                <span class="text-muted" style="font-size: 0.72rem;">@@@art.AutoreUsername</span>
                             </div>
                         </div>
                     </Template>
                 </RadzenDataGridColumn>
 
                 <!-- Categorie -->
-                <RadzenDataGridColumn TItem="Articolo" Title="Categorie" Width="140px" Sortable="false" Filterable="false">
+                <RadzenDataGridColumn TItem="AdminArticoloViewModel" Title="Categorie" Width="140px" Sortable="false" Filterable="false">
                     <Template Context="art">
                         <div class="d-flex flex-wrap gap-1">
-                            @foreach (var ac in art.ArticoloCategorie.Take(2))
+                            @foreach (var cat in art.Categorie.Take(2))
                             {
-                                <span class="category-badge">#@ac.Categoria?.NomeCategoria</span>
+                                <span class="category-badge">#@cat</span>
                             }
-                            @if (art.ArticoloCategorie.Count > 2)
+                            @if (art.Categorie.Count > 2)
                             {
                                 <span class="badge bg-light text-muted border" style="font-size: 0.68rem; border-radius: 0.35rem;">
-                                    +@(art.ArticoloCategorie.Count - 2)
+                                    +@(art.Categorie.Count - 2)
                                 </span>
                             }
                         </div>
@@ -198,7 +199,7 @@
                 </RadzenDataGridColumn>
 
                 <!-- Data (gg/mm/aa) -->
-                <RadzenDataGridColumn TItem="Articolo" Property="DataOraCreazione" Title="Data" Width="110px">
+                <RadzenDataGridColumn TItem="AdminArticoloViewModel" Property="DataOraCreazione" Title="Data" Width="110px">
                     <Template Context="art">
                         <span class="text-muted small" style="font-size: 0.82rem;">
                             @art.DataOraCreazione.ToLocalTime().ToString("dd/MM/yy")
@@ -207,24 +208,24 @@
                 </RadzenDataGridColumn>
 
                 <!-- Stats -->
-                <RadzenDataGridColumn TItem="Articolo" Title="Stats" Width="120px" Sortable="false" Filterable="false" TextAlign="TextAlign.Center">
+                <RadzenDataGridColumn TItem="AdminArticoloViewModel" Title="Stats" Width="120px" Sortable="false" Filterable="false" TextAlign="TextAlign.Center">
                     <Template Context="art">
                         <div class="d-flex align-items-center justify-content-center gap-2 text-muted" style="font-size: 0.82rem;">
                             <span title="Visualizzazioni" class="d-flex align-items-center gap-1">
-                                <RadzenIcon Icon="visibility" Style="font-size: 1em; color: #64748b;" /> @art.Visualizzazioni.Count
+                                <RadzenIcon Icon="visibility" Style="font-size: 1em; color: #64748b;" /> @art.VisualizzazioniCount
                             </span>
                             <span title="Like" class="d-flex align-items-center gap-1">
-                                <RadzenIcon Icon="favorite" Style="font-size: 1em; color: #ef4444;" /> @art.Likes.Count
+                                <RadzenIcon Icon="favorite" Style="font-size: 1em; color: #ef4444;" /> @art.LikesCount
                             </span>
                             <span title="Commenti" class="d-flex align-items-center gap-1">
-                                <RadzenIcon Icon="chat_bubble" Style="font-size: 1em; color: #6366f1;" /> @art.Commenti.Count
+                                <RadzenIcon Icon="chat_bubble" Style="font-size: 1em; color: #6366f1;" /> @art.CommentiCount
                             </span>
                         </div>
                     </Template>
                 </RadzenDataGridColumn>
 
                 <!-- Azioni -->
-                <RadzenDataGridColumn TItem="Articolo" Title="Azioni" Width="100px" Sortable="false" Filterable="false" TextAlign="TextAlign.Right">
+                <RadzenDataGridColumn TItem="AdminArticoloViewModel" Title="Azioni" Width="100px" Sortable="false" Filterable="false" TextAlign="TextAlign.Right">
                     <Template Context="art">
                         <div class="d-flex justify-content-end gap-1 pe-1">
                             <a href="/post/@art.ID_Articolo"
@@ -251,12 +252,29 @@
 </div>
 
 @code {
-    private RadzenDataGrid<Articolo>? grid;
+    public class AdminArticoloViewModel
+    {
+        public int ID_Articolo { get; set; }
+        public string Titolo { get; set; } = string.Empty;
+        public string? ImmagineCopertina { get; set; }
+        public DateTime DataOraCreazione { get; set; }
+        public string AutoreNomeCompleto { get; set; } = string.Empty;
+        public string AutoreCognome { get; set; } = string.Empty;
+        public string AutoreUsername { get; set; } = string.Empty;
+        public List<string> Categorie { get; set; } = new();
+        public List<int> CategorieIds { get; set; } = new();
+        public int VisualizzazioniCount { get; set; }
+        public int LikesCount { get; set; }
+        public int CommentiCount { get; set; }
+    }
+
+    private RadzenDataGrid<AdminArticoloViewModel>? grid;
     private bool isLoading = true;
     private bool isActionLoading = false;
+    private CancellationTokenSource cts = new();
 
-    private List<Articolo> articoli = new();
-    private List<Articolo> articoliFiltrati = new();
+    private List<AdminArticoloViewModel> articoli = new();
+    private List<AdminArticoloViewModel> articoliFiltrati = new();
     private List<Categoria> tutteCategorie = new();
 
     private string filtroTesto = string.Empty;
@@ -266,32 +284,46 @@
 
     protected override async Task OnInitializedAsync()
     {
-        tutteCategorie = await DbContext.Categorie
-            .AsNoTracking()
-            .OrderBy(c => c.NomeCategoria)
-            .ToListAsync();
-
-        await CaricaArticoli();
+        await CaricaDatiIniziali();
     }
 
-    private async Task CaricaArticoli()
+    private async Task CaricaDatiIniziali()
     {
         isLoading = true;
         try
         {
-            articoli = await DbContext.Articoli
+            using var context = await DbFactory.CreateDbContextAsync(cts.Token);
+
+            tutteCategorie = await context.Categorie
                 .AsNoTracking()
-                .AsSplitQuery()
-                .Include(a => a.Autore)
-                .Include(a => a.ArticoloCategorie)
-                    .ThenInclude(ac => ac.Categoria)
-                .Include(a => a.Visualizzazioni)
-                .Include(a => a.Likes)
-                .Include(a => a.Commenti)
+                .OrderBy(c => c.NomeCategoria)
+                .ToListAsync(cts.Token);
+
+            articoli = await context.Articoli
+                .AsNoTracking()
+                .Select(a => new AdminArticoloViewModel
+                {
+                    ID_Articolo = a.ID_Articolo,
+                    Titolo = a.Titolo,
+                    ImmagineCopertina = a.ImmagineCopertina,
+                    DataOraCreazione = a.DataOraCreazione,
+                    AutoreNomeCompleto = a.Autore != null ? a.Autore.Nome + " " + a.Autore.Cognome : "Anonimo",
+                    AutoreCognome = a.Autore != null ? a.Autore.Cognome : string.Empty,
+                    AutoreUsername = a.Autore != null ? a.Autore.Username : string.Empty,
+                    Categorie = a.ArticoloCategorie.Select(ac => ac.Categoria.NomeCategoria).ToList(),
+                    CategorieIds = a.ArticoloCategorie.Select(ac => ac.FK_Categoria).ToList(),
+                    VisualizzazioniCount = a.Visualizzazioni.Count(),
+                    LikesCount = a.Likes.Count(),
+                    CommentiCount = a.Commenti.Count()
+                })
                 .OrderByDescending(a => a.DataOraCreazione)
-                .ToListAsync();
+                .ToListAsync(cts.Token);
 
             ApplicaFiltri();
+        }
+        catch (OperationCanceledException)
+        {
+            // Query annullata in modo pulito al cambio pagina
         }
         catch (Exception ex)
         {
@@ -314,9 +346,9 @@
         articoliFiltrati = articoli.Where(a =>
             (string.IsNullOrWhiteSpace(filtroTesto) ||
              a.Titolo.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase) ||
-             $"{a.Autore.Nome} {a.Autore.Cognome}".Contains(filtroTesto, StringComparison.OrdinalIgnoreCase) ||
-             a.Autore.Username.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase)) &&
-            (!filtroCategoria.HasValue || a.ArticoloCategorie.Any(ac => ac.FK_Categoria == filtroCategoria.Value)) &&
+             a.AutoreNomeCompleto.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase) ||
+             a.AutoreUsername.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase)) &&
+            (!filtroCategoria.HasValue || a.CategorieIds.Contains(filtroCategoria.Value)) &&
             (!filtroDataDa.HasValue || a.DataOraCreazione.Date >= filtroDataDa.Value.Date) &&
             (!filtroDataA.HasValue || a.DataOraCreazione.Date <= filtroDataA.Value.Date)).ToList();
     }
@@ -359,23 +391,23 @@
         if (grid != null) grid.FirstPage();
     }
 
-    private async Task EliminaArticolo(Articolo target)
+    private async Task EliminaArticolo(AdminArticoloViewModel target)
     {
         if (isActionLoading) return;
         isActionLoading = true;
 
         try
         {
-            // Mostra il popup di conferma
             bool conferma = await DialogService.Confirm(
-                $"Sei sicuro di voler eliminare definitivamente l'articolo '{target.Titolo}' scritto da {target.Autore?.Nome} {target.Autore?.Cognome}?", 
+                $"Sei sicuro di voler eliminare definitivamente l'articolo '{target.Titolo}' scritto da {target.AutoreNomeCompleto}?", 
                 "Conferma Eliminazione", 
                 new ConfirmOptions() { OkButtonText = "Sì, Elimina", CancelButtonText = "Annulla" }) ?? false;
 
-            // Se l'utente clicca "Sì", procedi con l'eliminazione
             if (conferma)
             {
-                await DbContext.Articoli
+                using var context = await DbFactory.CreateDbContextAsync();
+
+                await context.Articoli
                     .Where(a => a.ID_Articolo == target.ID_Articolo)
                     .ExecuteDeleteAsync();
 
@@ -410,5 +442,11 @@
         {
             isActionLoading = false;
         }
+    }
+
+    public void Dispose()
+    {
+        cts.Cancel();
+        cts.Dispose();
     }
 }

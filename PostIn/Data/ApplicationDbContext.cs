@@ -68,10 +68,22 @@ public class ApplicationDbContext : DbContext
                 j => j.HasKey(l => new { l.FK_Dipendente, l.FK_Articolo })
             );
 
-
-        // Vincolo SQL per impedire l'autofollow
+        // Relazione Self-Referencing N:N (Follow tra Dipendenti) - Restrict per SQL Server
         modelBuilder.Entity<IscrizioniFollow>()
-            .ToTable(t => t.HasCheckConstraint("CK_IscrizioniFollow_NoSelfFollow", "\"FK_Follower\" <> \"FK_Followed\""));
+            .HasOne(f => f.Follower)
+            .WithMany(d => d.Following)
+            .HasForeignKey(f => f.FK_Follower)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<IscrizioniFollow>()
+            .HasOne(f => f.Followed)
+            .WithMany(d => d.Followers)
+            .HasForeignKey(f => f.FK_Followed)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Vincolo T-SQL per impedire l'autofollow
+        modelBuilder.Entity<IscrizioniFollow>()
+            .ToTable(t => t.HasCheckConstraint("CK_IscrizioniFollow_NoSelfFollow", "[FK_Follower] <> [FK_Followed]"));
 
         // Relazione 1:N Dipendente (Autore) -> Articoli
         modelBuilder.Entity<Articolo>()
@@ -93,25 +105,12 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(ac => ac.FK_Categoria)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Relazione Self-Referencing N:N (Follow tra Dipendenti)
-        modelBuilder.Entity<IscrizioniFollow>()
-            .HasOne(f => f.Follower)
-            .WithMany(d => d.Following)
-            .HasForeignKey(f => f.FK_Follower)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<IscrizioniFollow>()
-            .HasOne(f => f.Followed)
-            .WithMany(d => d.Followers)
-            .HasForeignKey(f => f.FK_Followed)
-            .OnDelete(DeleteBehavior.Cascade);
-
         // Relazione 1:N Dipendente & Articolo -> Visualizzazioni
         modelBuilder.Entity<Visualizzazione>()
             .HasOne(v => v.Dipendente)
             .WithMany(d => d.Visualizzazioni)
             .HasForeignKey(v => v.FK_Dipendente)
-            .OnDelete(DeleteBehavior.Cascade);
+            .OnDelete(DeleteBehavior.Restrict); // Restrict per evitare percorsi multipli a cascata
 
         modelBuilder.Entity<Visualizzazione>()
             .HasOne(v => v.Articolo)
@@ -132,7 +131,7 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(c => c.FK_Autore)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // UNIQUE: Dipendente.Username (Case Insensitive)
+        // UNIQUE: Dipendente.Username
         modelBuilder.Entity<Dipendente>()
             .HasIndex(d => d.Username)
             .IsUnique();

@@ -8,7 +8,7 @@
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Authentication.Cookies
 @using Microsoft.EntityFrameworkCore
-@inject PostIn.Data.ApplicationDbContext _context
+@inject IDbContextFactory<PostIn.Data.ApplicationDbContext> DbFactory
 
 @using PostIn.Data
 @using PostIn.Data.Entities
@@ -61,11 +61,9 @@
 </div>
 
 @code {
-    // Cattura la richiesta HTTP corrente
     [CascadingParameter]
     public HttpContext? HttpContext { get; set; }
 
-    // Raccoglie i dati inviati dal form tramite HTTP POST
     [SupplyParameterFromForm]
     public LoginModel loginData { get; set; } = new();
 
@@ -74,12 +72,12 @@
     private async Task OnSubmit()
     {
         var username = loginData.Username.Trim().ToLowerInvariant();
+
+        using var context = await DbFactory.CreateDbContextAsync();
         
-        // Cerca il dipendente
-        var dipendente = await _context.Dipendenti
+        var dipendente = await context.Dipendenti
             .FirstOrDefaultAsync(d => d.Username.ToLower() == username);
 
-        // Verifica hash della password con PasswordHelper
         if (dipendente != null && PasswordHelper.VerifyPassword(loginData.Password, dipendente.PasswordHash))
         {
             if (dipendente.StatoAccount != 1)
@@ -89,7 +87,7 @@
             }
 
             dipendente.UltimoAccesso = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
 
             var claims = new List<Claim>
             {

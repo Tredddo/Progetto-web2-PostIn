@@ -1,6 +1,7 @@
 @page "/profile"
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Authorize]
+@implements IDisposable
 @using Microsoft.EntityFrameworkCore
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Components.Authorization
@@ -9,7 +10,8 @@
 @using PostIn.Components.Shared
 @using Radzen
 @using Radzen.Blazor
-@inject ApplicationDbContext DbContext
+
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
@@ -71,6 +73,7 @@
     private bool isLoading = true;
     private bool isActionLoading = false;
     private int currentUserId = 0;
+    private CancellationTokenSource cts = new();
     private Dipendente? dipendente;
     private List<Categoria> tutteCategorie = new();
     private HashSet<int> categoriePreferiteIds = new();
@@ -97,25 +100,41 @@
         isLoading = true;
         try
         {
-            dipendente = await DbContext.Dipendenti
+            using var context = await DbFactory.CreateDbContextAsync(cts.Token);
+
+            dipendente = await context.Dipendenti
+                .AsNoTracking()
                 .Include(d => d.Articoliscritti)
-                .FirstOrDefaultAsync(d => d.ID_Dipendente == currentUserId);
+                .FirstOrDefaultAsync(d => d.ID_Dipendente == currentUserId, cts.Token);
 
             if (dipendente != null)
             {
                 ultimoAccesso = dipendente.UltimoAccesso;
 
-                categoriePreferiteIds = (await DbContext.CategoriePreferite
+                categoriePreferiteIds = (await context.CategoriePreferite
                     .AsNoTracking()
                     .Where(cp => cp.FK_Dipendente == currentUserId)
                     .Select(cp => cp.FK_Categoria)
-                    .ToListAsync())
+                    .ToListAsync(cts.Token))
                     .ToHashSet();
             }
 
-            tutteCategorie = await DbContext.Categorie.AsNoTracking().OrderBy(c => c.NomeCategoria).ToListAsync();
-            followingCount = await DbContext.IscrizioniFollow.CountAsync(f => f.FK_Follower == currentUserId);
-            followersCount = await DbContext.IscrizioniFollow.CountAsync(f => f.FK_Followed == currentUserId);
+            tutteCategorie = await context.Categorie
+                .AsNoTracking()
+                .OrderBy(c => c.NomeCategoria)
+                .ToListAsync(cts.Token);
+
+            followingCount = await context.IscrizioniFollow
+                .AsNoTracking()
+                .CountAsync(f => f.FK_Follower == currentUserId, cts.Token);
+
+            followersCount = await context.IscrizioniFollow
+                .AsNoTracking()
+                .CountAsync(f => f.FK_Followed == currentUserId, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Navigazione annullata al cambio pagina
         }
         finally
         {
@@ -138,17 +157,19 @@
 
         try
         {
-            var recordEsistente = await DbContext.CategoriePreferite
+            using var context = await DbFactory.CreateDbContextAsync();
+
+            var recordEsistente = await context.CategoriePreferite
                 .FirstOrDefaultAsync(cp => cp.FK_Dipendente == currentUserId && cp.FK_Categoria == categoriaId);
 
             if (!eraGiaSelezionata && recordEsistente == null)
             {
-                DbContext.CategoriePreferite.Add(new CategoriaPreferita
+                context.CategoriePreferite.Add(new CategoriaPreferita
                 {
                     FK_Dipendente = currentUserId,
                     FK_Categoria = categoriaId
                 });
-                await DbContext.SaveChangesAsync();
+                await context.SaveChangesAsync();
 
                 NotificationService.Notify(new NotificationMessage
                 {
@@ -160,8 +181,8 @@
             }
             else if (eraGiaSelezionata && recordEsistente != null)
             {
-                DbContext.CategoriePreferite.Remove(recordEsistente);
-                await DbContext.SaveChangesAsync();
+                context.CategoriePreferite.Remove(recordEsistente);
+                await context.SaveChangesAsync();
 
                 NotificationService.Notify(new NotificationMessage
                 {
@@ -199,7 +220,6 @@
         var post = dipendente?.Articoliscritti.FirstOrDefault(a => a.ID_Articolo == articoloId);
         if (post == null) return;
 
-        // Apertura del modale di conferma nativo Radzen
         bool? confermato = await DialogService.Confirm(
             $"Sei sicuro di voler eliminare definitivamente l'articolo \"{post.Titolo}\"? Tutti i commenti, visualizzazioni e like associati verranno rimossi in modo permanente.",
             "Conferma Eliminazione Articolo",
@@ -223,12 +243,13 @@
 
         try
         {
-            var articolo = await DbContext.Articoli
+            using var context = await DbFactory.CreateDbContextAsync();
+
+            var articolo = await context.Articoli
                 .FirstOrDefaultAsync(a => a.ID_Articolo == articoloId);
 
             if (articolo != null)
             {
-                // Rimozione del file copertina da disco protetto
                 if (!string.IsNullOrWhiteSpace(articolo.ImmagineCopertina) &&
                     articolo.ImmagineCopertina.StartsWith("/uploads/covers/"))
                 {
@@ -247,21 +268,9 @@
                     }
                 }
 
-                // Pulizia tabelle collegate
-                var artCategorie = DbContext.ArticoloCategorie.Where(ac => ac.FK_Articolo == articoloId);
-                var commenti = DbContext.Commenti.Where(c => c.FK_Articolo == articoloId);
-                var likes = DbContext.Likes.Where(l => l.FK_Articolo == articoloId);
-                var salvataggi = DbContext.SalvataggiDaLeggere.Where(s => s.FK_Articolo == articoloId);
-                var visualizzazioni = DbContext.Visualizzazioni.Where(v => v.FK_Articolo == articoloId);
-
-                DbContext.ArticoloCategorie.RemoveRange(artCategorie);
-                DbContext.Commenti.RemoveRange(commenti);
-                DbContext.Likes.RemoveRange(likes);
-                DbContext.SalvataggiDaLeggere.RemoveRange(salvataggi);
-                DbContext.Visualizzazioni.RemoveRange(visualizzazioni);
-
-                DbContext.Articoli.Remove(articolo);
-                await DbContext.SaveChangesAsync();
+                await context.Articoli
+                    .Where(a => a.ID_Articolo == articoloId)
+                    .ExecuteDeleteAsync();
 
                 NotificationService.Notify(new NotificationMessage
                 {
@@ -294,4 +303,10 @@
     }
 
     #endregion
+
+    public void Dispose()
+    {
+        cts.Cancel();
+        cts.Dispose();
+    }
 }

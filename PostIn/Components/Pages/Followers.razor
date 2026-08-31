@@ -1,6 +1,7 @@
 @page "/followers"
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Authorize]
+@implements IDisposable
 @using Microsoft.EntityFrameworkCore
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Components.Authorization
@@ -8,7 +9,8 @@
 @using PostIn.Data.Entities
 @using Radzen
 @using Radzen.Blazor
-@inject ApplicationDbContext DbContext
+
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
@@ -81,6 +83,7 @@
 @code {
     private bool isLoading = true;
     private int currentUserId = 0;
+    private CancellationTokenSource cts = new();
     private List<Dipendente> followers = new();
     private HashSet<int> followedUserIds = new();
 
@@ -98,15 +101,36 @@
         isLoading = true;
         try
         {
-            followers = await (from f in DbContext.IscrizioniFollow
-                               join d in DbContext.Dipendenti on f.FK_Follower equals d.ID_Dipendente
-                               where f.FK_Followed == currentUserId
-                               select d).ToListAsync();
+            using var context = await DbFactory.CreateDbContextAsync(cts.Token);
 
-            followedUserIds = (await DbContext.IscrizioniFollow
+            followers = await (from f in context.IscrizioniFollow
+                               join d in context.Dipendenti on f.FK_Follower equals d.ID_Dipendente
+                               where f.FK_Followed == currentUserId
+                               select d)
+                               .AsNoTracking()
+                               .ToListAsync(cts.Token);
+
+            var followedList = await context.IscrizioniFollow
+                .AsNoTracking()
                 .Where(f => f.FK_Follower == currentUserId)
                 .Select(f => f.FK_Followed)
-                .ToListAsync()).ToHashSet();
+                .ToListAsync(cts.Token);
+
+            followedUserIds = followedList.ToHashSet();
+        }
+        catch (OperationCanceledException)
+        {
+            // Navigazione annullata al cambio pagina
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore",
+                Detail = ex.Message,
+                Duration = 2500
+            });
         }
         finally
         {
@@ -118,30 +142,30 @@
     {
         try
         {
+            using var context = await DbFactory.CreateDbContextAsync();
             var isFollowing = followedUserIds.Contains(targetUserId);
 
             if (isFollowing)
             {
-                var follow = await DbContext.IscrizioniFollow
-                    .FirstOrDefaultAsync(f => f.FK_Follower == currentUserId && f.FK_Followed == targetUserId);
-                if (follow != null)
-                {
-                    DbContext.IscrizioniFollow.Remove(follow);
-                    followedUserIds.Remove(targetUserId);
-                }
+                await context.IscrizioniFollow
+                    .Where(f => f.FK_Follower == currentUserId && f.FK_Followed == targetUserId)
+                    .ExecuteDeleteAsync();
+
+                followedUserIds.Remove(targetUserId);
             }
             else
             {
-                DbContext.IscrizioniFollow.Add(new IscrizioniFollow
+                context.IscrizioniFollow.Add(new IscrizioniFollow
                 {
                     FK_Follower = currentUserId,
                     FK_Followed = targetUserId,
-                    DataInizioInterazione = DateTime.UtcNow // <-- Proprietà in italiano
+                    DataInizioInterazione = DateTime.UtcNow
                 });
+                await context.SaveChangesAsync();
+
                 followedUserIds.Add(targetUserId);
             }
 
-            await DbContext.SaveChangesAsync();
             StateHasChanged();
         }
         catch (Exception ex)
@@ -154,5 +178,11 @@
                 Duration = 2500
             });
         }
+    }
+
+    public void Dispose()
+    {
+        cts.Cancel();
+        cts.Dispose();
     }
 }

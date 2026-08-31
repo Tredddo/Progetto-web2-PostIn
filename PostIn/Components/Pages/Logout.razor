@@ -1,14 +1,15 @@
 @page "/logout"
+@attribute [AllowAnonymous]
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Authentication.Cookies
 @using Microsoft.AspNetCore.Authorization
-@attribute [AllowAnonymous]
+@using Radzen
+@using Radzen.Blazor
 @inject NavigationManager NavigationManager
 
 <PageTitle>Disconnessione - PostIn</PageTitle>
 
-<!-- Questo componente esegue il logout tramite HTTP POST nativo -->
-<div class="d-flex justify-content-center align-items-center" style="min-height:60vh;">
+<div class="d-flex justify-content-center align-items-center" style="min-height: 60vh;">
     <div class="text-center">
         <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Medium" class="mb-3" />
         <p class="text-muted">Disconnessione in corso...</p>
@@ -24,11 +25,8 @@
         if (HttpContext != null)
         {
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            NavigationManager.NavigateTo("/login", forceLoad: true);
         }
-        else
-        {
-            NavigationManager.NavigateTo("/login", forceLoad: true);
-        }
+
+        NavigationManager.NavigateTo("/login", forceLoad: true);
     }
 }

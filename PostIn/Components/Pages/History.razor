@@ -1,6 +1,7 @@
 @page "/history"
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Authorize]
+@implements IDisposable
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
 @using System.Security.Claims
@@ -10,7 +11,7 @@
 @using Radzen
 @using Radzen.Blazor
 
-@inject ApplicationDbContext DbContext
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 
@@ -83,7 +84,6 @@
                             var primaCategoria = articolo?.ArticoloCategorie?.FirstOrDefault()?.Categoria?.NomeCategoria;
 
                             <RadzenCard class="rz-shadow-sm p-3 history-card" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
-                                <!-- Rimosso flex-wrap per mantenere tutto su una riga orizzontale coerente -->
                                 <div class="d-flex justify-content-between align-items-center gap-3">
                                     
                                     <!-- Info Post & Autore -->
@@ -103,7 +103,6 @@
                                                 </span>
                                             </div>
 
-                                            <!-- Il titolo ora viene troncato correttamente con i puntini (...) senza andare a capo -->
                                             <h3 class="h6 fw-bold mb-0 text-truncate" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                                 <a href="/post/@item.FK_Articolo" class="text-dark text-decoration-none history-title-link">
                                                     @(articolo?.Titolo ?? "Post non disponibile")
@@ -112,7 +111,7 @@
                                         </div>
                                     </div>
 
-                                    <!-- Orario & Bottone Riapri (bloccati a destra senza andare a capo) -->
+                                    <!-- Orario & Bottone Riapri -->
                                     <div class="d-flex align-items-center gap-3 ms-3 flex-shrink-0" style="flex-shrink: 0;">
                                         <time datetime="@item.DataOraVisualizzazione.ToString("yyyy-MM-ddTHH:mm:ssZ")" class="text-muted small d-flex align-items-center gap-1" style="font-size: 0.78rem;">
                                             <RadzenIcon Icon="schedule" Style="font-size: 1em; color: #94a3b8;" />
@@ -175,8 +174,8 @@
 @code {
     private bool isLoading = true;
     private List<Visualizzazione> cronologia = new();
+    private CancellationTokenSource cts = new();
 
-    // Calcola il numero di articoli distinti tramite ID (FK_Articolo)
     private int ArticoliUniciCount => cronologia.Select(v => v.FK_Articolo).Distinct().Count();
 
     protected override async Task OnInitializedAsync()
@@ -186,9 +185,23 @@
 
         if (int.TryParse(userIdClaim, out int userId))
         {
-            cronologia = await DbContext.Visualizzazioni
+            await CaricaCronologia(userId);
+        }
+        else
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CaricaCronologia(int userId)
+    {
+        isLoading = true;
+        try
+        {
+            using var context = await DbFactory.CreateDbContextAsync(cts.Token);
+
+            cronologia = await context.Visualizzazioni
                 .AsNoTracking()
-                .AsSplitQuery()
                 .Where(v => v.FK_Dipendente == userId)
                 .Include(v => v.Articolo)
                     .ThenInclude(a => a!.Autore)
@@ -196,13 +209,18 @@
                     .ThenInclude(a => a!.ArticoloCategorie)
                         .ThenInclude(ac => ac.Categoria)
                 .OrderByDescending(v => v.DataOraVisualizzazione)
-                .ToListAsync();
+                .ToListAsync(cts.Token);
         }
-
-        isLoading = false;
+        catch (OperationCanceledException)
+        {
+            // Query interrotta in modo pulito per cambio pagina
+        }
+        finally
+        {
+            isLoading = false;
+        }
     }
 
-    // Helper LINQ per dividere le letture in sezioni temporali (Oggi, Ieri, Data estesa)
     private IEnumerable<KeyValuePair<string, List<Visualizzazione>>> RaggruppaLetture()
     {
         var oggi = DateTime.Today;
@@ -217,5 +235,11 @@
                 return dataLocale.ToString("dd MMMM yyyy");
             })
             .ToDictionary(g => g.Key, g => g.ToList());
+    }
+
+    public void Dispose()
+    {
+        cts.Cancel();
+        cts.Dispose();
     }
 }

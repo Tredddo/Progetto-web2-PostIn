@@ -1,6 +1,7 @@
 @page "/subscriptions"
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Authorize]
+@implements IDisposable
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
 @using System.Security.Claims
@@ -10,7 +11,7 @@
 @using Radzen
 @using Radzen.Blazor
 
-@inject ApplicationDbContext DbContext
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
@@ -266,6 +267,7 @@
     private bool isActionLoading = false;
     private string searchQuery = string.Empty;
     private int currentUserId = 0;
+    private CancellationTokenSource cts = new();
 
     private List<IscrizioniFollow> following = new();
     private List<IscrizioniFollow> followers = new();
@@ -286,27 +288,33 @@
         isLoading = true;
         try
         {
-            tuttiDipendenti = await DbContext.Dipendenti
+            using var context = await DbFactory.CreateDbContextAsync(cts.Token);
+
+            tuttiDipendenti = await context.Dipendenti
                 .AsNoTracking()
                 .OrderBy(d => d.Cognome)
                 .ThenBy(d => d.Nome)
-                .ToListAsync();
+                .ToListAsync(cts.Token);
 
-            following = await DbContext.IscrizioniFollow
+            following = await context.IscrizioniFollow
                 .AsNoTracking()
                 .Where(f => f.FK_Follower == currentUserId)
                 .Include(f => f.Followed)
                 .OrderBy(f => f.Followed.Cognome)
-                .ToListAsync();
+                .ToListAsync(cts.Token);
 
-            followers = await DbContext.IscrizioniFollow
+            followers = await context.IscrizioniFollow
                 .AsNoTracking()
                 .Where(f => f.FK_Followed == currentUserId)
                 .Include(f => f.Follower)
                 .OrderBy(f => f.Follower.Cognome)
-                .ToListAsync();
+                .ToListAsync(cts.Token);
 
             followingIds = following.Select(f => f.FK_Followed).ToHashSet();
+        }
+        catch (OperationCanceledException)
+        {
+            // Navigazione annullata al cambio pagina
         }
         catch (Exception ex)
         {
@@ -331,16 +339,18 @@
 
         try
         {
+            using var context = await DbFactory.CreateDbContextAsync();
+
             var targetDipendente = tuttiDipendenti.FirstOrDefault(d => d.ID_Dipendente == targetId);
             var nomeTarget = targetDipendente != null ? $"{targetDipendente.Nome} {targetDipendente.Cognome}" : "il collega";
 
-            var recordEsistente = await DbContext.IscrizioniFollow
+            var recordEsistente = await context.IscrizioniFollow
                 .FirstOrDefaultAsync(f => f.FK_Follower == currentUserId && f.FK_Followed == targetId);
 
             if (recordEsistente != null)
             {
-                DbContext.IscrizioniFollow.Remove(recordEsistente);
-                await DbContext.SaveChangesAsync();
+                context.IscrizioniFollow.Remove(recordEsistente);
+                await context.SaveChangesAsync();
                 followingIds.Remove(targetId);
 
                 NotificationService.Notify(new NotificationMessage
@@ -353,13 +363,13 @@
             }
             else
             {
-                DbContext.IscrizioniFollow.Add(new IscrizioniFollow
+                context.IscrizioniFollow.Add(new IscrizioniFollow
                 {
                     FK_Follower = currentUserId,
                     FK_Followed = targetId,
                     DataInizioInterazione = DateTime.UtcNow
                 });
-                await DbContext.SaveChangesAsync();
+                await context.SaveChangesAsync();
                 followingIds.Add(targetId);
 
                 NotificationService.Notify(new NotificationMessage
@@ -388,5 +398,11 @@
             isActionLoading = false;
             StateHasChanged();
         }
+    }
+
+    public void Dispose()
+    {
+        cts.Cancel();
+        cts.Dispose();
     }
 }

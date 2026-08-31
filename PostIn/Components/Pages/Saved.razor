@@ -1,6 +1,7 @@
 @page "/saved"
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Authorize]
+@implements IDisposable
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
 @using System.Security.Claims
@@ -10,7 +11,7 @@
 @using Radzen
 @using Radzen.Blazor
 
-@inject ApplicationDbContext DbContext
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
@@ -266,6 +267,7 @@
     private bool isActionLoading = false;
     private string filtroRicerca = string.Empty;
     private int currentUserId = 0;
+    private CancellationTokenSource cts = new();
     private List<SalvataggioDaLeggere> salvati = new();
 
     protected override async Task OnInitializedAsync()
@@ -282,9 +284,10 @@
         isLoading = true;
         try
         {
-            salvati = await DbContext.SalvataggiDaLeggere
+            using var context = await DbFactory.CreateDbContextAsync(cts.Token);
+
+            salvati = await context.SalvataggiDaLeggere
                 .AsNoTracking()
-                .AsSplitQuery()
                 .Where(s => s.FK_Dipendente == currentUserId)
                 .Include(s => s.Articolo)
                     .ThenInclude(a => a!.Autore)
@@ -292,7 +295,11 @@
                     .ThenInclude(a => a!.ArticoloCategorie)
                     .ThenInclude(ac => ac.Categoria)
                 .OrderByDescending(s => s.DataSalvataggio)
-                .ToListAsync();
+                .ToListAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Navigazione annullata al cambio pagina
         }
         catch (Exception ex)
         {
@@ -317,24 +324,23 @@
 
         try
         {
-            var salvataggio = await DbContext.SalvataggiDaLeggere
-                .FirstOrDefaultAsync(s => s.FK_Dipendente == currentUserId && s.FK_Articolo == articoloId);
+            using var context = await DbFactory.CreateDbContextAsync();
 
-            if (salvataggio != null)
+            await context.SalvataggiDaLeggere
+                .Where(s => s.FK_Dipendente == currentUserId && s.FK_Articolo == articoloId)
+                .ExecuteDeleteAsync();
+
+            salvati.RemoveAll(s => s.FK_Articolo == articoloId);
+
+            NotificationService.Notify(new NotificationMessage
             {
-                DbContext.SalvataggiDaLeggere.Remove(salvataggio);
-                await DbContext.SaveChangesAsync();
+                Severity = NotificationSeverity.Info,
+                Summary = "Segnalibri",
+                Detail = "Articolo rimosso dai salvati.",
+                Duration = 2500
+            });
 
-                NotificationService.Notify(new NotificationMessage
-                {
-                    Severity = NotificationSeverity.Info,
-                    Summary = "Segnalibri",
-                    Detail = "Articolo rimosso dai salvati.",
-                    Duration = 2500
-                });
-
-                await CaricaSalvati();
-            }
+            StateHasChanged();
         }
         catch (Exception ex)
         {
@@ -349,7 +355,12 @@
         finally
         {
             isActionLoading = false;
-            StateHasChanged();
         }
+    }
+
+    public void Dispose()
+    {
+        cts.Cancel();
+        cts.Dispose();
     }
 }

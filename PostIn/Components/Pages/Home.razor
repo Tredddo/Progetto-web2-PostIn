@@ -1,6 +1,7 @@
 ﻿@page "/"
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Authorize]
+@implements IDisposable
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
 @using System.Security.Claims
@@ -11,7 +12,7 @@
 @using Radzen
 @using Radzen.Blazor
 
-@inject ApplicationDbContext _context
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
@@ -42,7 +43,7 @@
                       Click='() => NavigationManager.NavigateTo("/create-post")' />
     </header>
 
-    <!-- BARRA FILTRI (RadzenCard con pulsanti rettangolari) -->
+    <!-- BARRA FILTRI -->
     <RadzenCard class="rz-shadow-sm p-2 mb-4 d-flex flex-wrap align-items-center justify-content-between gap-2" 
                 Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #f8fafc;">
         
@@ -93,7 +94,7 @@
             </div>
         </LoadingTemplate>
 
-        <!-- TEMPLATE STATO VUOTO (CONDIZIONALE PER FILTRI) -->
+        <!-- TEMPLATE STATO VUOTO -->
         <EmptyTemplate>
             <RadzenCard class="rz-shadow-sm p-5 text-center" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
                 @if (filtroSelezionato == TipoFiltro.Preferiti)
@@ -143,7 +144,7 @@
             </RadzenCard>
         </EmptyTemplate>
 
-        <!-- TEMPLATE SINGOLO ELEMENTO (Tipizzato come Articolo) -->
+        <!-- TEMPLATE SINGOLO ELEMENTO -->
         <ItemTemplate Context="post">
             @{
                 var isSaved = salvatiIds.Contains(post.ID_Articolo);
@@ -160,7 +161,6 @@
 </div>
 
 <style>
-    /* Pulsanti filtri rettangolari */
     .filter-rect-btn {
         border-radius: 0.55rem !important;
         font-size: 0.83rem;
@@ -182,7 +182,6 @@
         color: #1e293b !important;
     }
 
-    /* Badge conteggio rettangolare */
     .count-badge {
         background-color: rgba(255, 255, 255, 0.25);
         color: inherit;
@@ -203,6 +202,7 @@
     private bool isLoading = true;
     private int currentUserId = 0;
     private TipoFiltro filtroSelezionato = TipoFiltro.Tutti;
+    private CancellationTokenSource cts = new();
 
     private List<Articolo> articoliTutti = new();
     private HashSet<int> categoriePreferiteIds = new();
@@ -230,37 +230,42 @@
         isLoading = true;
         try
         {
-            categoriePreferiteIds = (await _context.CategoriePreferite
+            using var context = await DbFactory.CreateDbContextAsync(cts.Token);
+
+            categoriePreferiteIds = (await context.CategoriePreferite
                 .AsNoTracking()
                 .Where(cp => cp.FK_Dipendente == currentUserId)
                 .Select(cp => cp.FK_Categoria)
-                .ToListAsync())
+                .ToListAsync(cts.Token))
                 .ToHashSet();
 
-            utentiSeguitiIds = (await _context.IscrizioniFollow
+            utentiSeguitiIds = (await context.IscrizioniFollow
                 .AsNoTracking()
                 .Where(f => f.FK_Follower == currentUserId)
                 .Select(f => f.FK_Followed)
-                .ToListAsync())
+                .ToListAsync(cts.Token))
                 .ToHashSet();
 
-            salvatiIds = (await _context.SalvataggiDaLeggere
+            salvatiIds = (await context.SalvataggiDaLeggere
                 .AsNoTracking()
                 .Where(s => s.FK_Dipendente == currentUserId)
                 .Select(s => s.FK_Articolo)
-                .ToListAsync())
+                .ToListAsync(cts.Token))
                 .ToHashSet();
 
-            articoliTutti = await _context.Articoli
+            articoliTutti = await context.Articoli
                 .AsNoTracking()
-                .AsSplitQuery()
                 .Include(a => a.Autore)
                 .Include(a => a.ArticoloCategorie)
                     .ThenInclude(ac => ac.Categoria)
                 .Include(a => a.Likes)
                 .Include(a => a.Commenti)
                 .OrderByDescending(a => a.DataOraCreazione)
-                .ToListAsync();
+                .ToListAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Navigazione avvenuta prima della risposta del DB: nessun errore
         }
         catch (Exception ex)
         {
@@ -289,15 +294,17 @@
 
         try
         {
-            var likeEsistente = await _context.Likes
+            using var context = await DbFactory.CreateDbContextAsync();
+
+            var likeEsistente = await context.Likes
                 .FirstOrDefaultAsync(l => l.FK_Dipendente == currentUserId && l.FK_Articolo == articoloId);
 
             var postInMemoria = articoliTutti.FirstOrDefault(a => a.ID_Articolo == articoloId);
 
             if (likeEsistente != null)
             {
-                _context.Likes.Remove(likeEsistente);
-                await _context.SaveChangesAsync();
+                context.Likes.Remove(likeEsistente);
+                await context.SaveChangesAsync();
 
                 if (postInMemoria != null)
                 {
@@ -314,12 +321,12 @@
                     DataRilascio = DateTime.UtcNow
                 };
 
-                _context.Likes.Add(nuovoLike);
-                await _context.SaveChangesAsync();
+                context.Likes.Add(nuovoLike);
+                await context.SaveChangesAsync();
 
                 if (postInMemoria != null)
                 {
-                    var dipendenteCorrente = await _context.Dipendenti
+                    var dipendenteCorrente = await context.Dipendenti
                         .AsNoTracking()
                         .FirstOrDefaultAsync(d => d.ID_Dipendente == currentUserId);
 
@@ -347,13 +354,15 @@
 
         try
         {
-            var salvataggioEsistente = await _context.SalvataggiDaLeggere
+            using var context = await DbFactory.CreateDbContextAsync();
+
+            var salvataggioEsistente = await context.SalvataggiDaLeggere
                 .FirstOrDefaultAsync(s => s.FK_Dipendente == currentUserId && s.FK_Articolo == articoloId);
 
             if (salvataggioEsistente != null)
             {
-                _context.SalvataggiDaLeggere.Remove(salvataggioEsistente);
-                await _context.SaveChangesAsync();
+                context.SalvataggiDaLeggere.Remove(salvataggioEsistente);
+                await context.SaveChangesAsync();
 
                 salvatiIds.Remove(articoloId);
 
@@ -367,13 +376,13 @@
             }
             else
             {
-                _context.SalvataggiDaLeggere.Add(new SalvataggioDaLeggere
+                context.SalvataggiDaLeggere.Add(new SalvataggioDaLeggere
                 {
                     FK_Dipendente = currentUserId,
                     FK_Articolo = articoloId,
                     DataSalvataggio = DateTime.UtcNow
                 });
-                await _context.SaveChangesAsync();
+                await context.SaveChangesAsync();
 
                 salvatiIds.Add(articoloId);
 
@@ -398,5 +407,11 @@
                 Duration = 3000
             });
         }
+    }
+
+    public void Dispose()
+    {
+        cts.Cancel();
+        cts.Dispose();
     }
 }
