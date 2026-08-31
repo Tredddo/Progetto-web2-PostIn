@@ -6,12 +6,10 @@
 @using Microsoft.AspNetCore.Authorization
 @using PostIn.Data
 @using PostIn.Data.Entities
-@using PostIn.Services
 @using Radzen
 @using Radzen.Blazor
 
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
-@inject SentimentService SentimentService
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
 @inject DialogService DialogService
@@ -30,9 +28,9 @@
                 <span class="badge bg-danger px-2.5 py-1 text-uppercase fw-bold" style="font-size: 0.7rem; border-radius: 0.35rem; letter-spacing: 0.05em;">
                     Admin
                 </span>
-                <h1 class="h3 fw-bold text-dark mb-0">Moderazione Commenti & Sentiment</h1>
+                <h1 class="h3 fw-bold text-dark mb-0">Moderazione Commenti</h1>
             </div>
-            <p class="text-muted small mb-0">Supervisiona i commenti e avvia l'analisi del sentiment on-demand per articolo tramite Azure AI</p>
+            <p class="text-muted small mb-0">Supervisiona, analizza e modera tutti i commenti pubblicati sotto gli articoli</p>
         </div>
 
         <span class="count-badge-header">
@@ -56,13 +54,12 @@
         </a>
     </div>
 
-    <!-- FILTRI & AZIONI ON-DEMAND -->
+    <!-- FILTRI DI RICERCA -->
     <RadzenCard class="rz-shadow-sm p-3 mb-4" Style="border-radius: 0.85rem; border: 1px solid #e2e8f0; background: #ffffff;">
         <div class="row g-3 align-items-end">
-            <!-- Ricerca Testo -->
-            <div class="col-md-4 col-lg-4">
+            <div class="col-md-6 col-lg-6">
                 <label class="form-label fw-bold small text-muted text-uppercase mb-1" style="font-size: 0.73rem; letter-spacing: 0.05em;">
-                    Cerca Testo / Autore
+                    Cerca nel Testo, Autore o Titolo Post
                 </label>
                 <div class="input-group" style="border-radius: 0.55rem; overflow: hidden;">
                     <span class="input-group-text bg-light text-muted border-end-0">
@@ -70,45 +67,30 @@
                     </span>
                     <input type="text"
                            class="form-control border-start-0 modern-input"
-                           placeholder="Cerca parole chiave..."
+                           placeholder="Cerca parole chiave, utente o titolo articolo..."
                            value="@filtroTesto"
                            @oninput="OnFiltroTestoChanged" />
                 </div>
             </div>
 
-            <!-- Filtro per Articolo Specifico -->
             <div class="col-md-4 col-lg-4">
                 <label class="form-label fw-bold small text-muted text-uppercase mb-1" style="font-size: 0.73rem; letter-spacing: 0.05em;">
-                    Filtra per Articolo
+                    Data di Pubblicazione
                 </label>
-                <RadzenDropDown TValue="int?"
-                                Data="@articoliDisponibili"
-                                TextProperty="Titolo"
-                                ValueProperty="ID_Articolo"
-                                AllowClear="true"
-                                Placeholder="Tutti gli articoli"
-                                Value="@filtroArticoloId"
-                                ValueChanged="@((int? val) => OnFiltroArticoloChanged(val))"
-                                Style="width: 100%; border-radius: 0.55rem;" />
+                <RadzenDatePicker Value="@filtroData" 
+                                  ValueChanged="@((DateTime? val) => OnFiltroDataChanged(val))"
+                                  DateFormat="dd/MM/yyyy" 
+                                  Placeholder="gg/mm/aaaa"
+                                  Style="width: 100%; border-radius: 0.55rem;" />
             </div>
 
-            <!-- Pulsante Analisi Azure AI On-Demand -->
-            <div class="col-md-4 col-lg-4 d-flex gap-2">
-                <RadzenButton Icon="psychology"
-                              Text="@(isAnalyzing ? "Analisi Azure in corso..." : "Analizza Post Selezionato")"
-                              ButtonStyle="ButtonStyle.Primary"
-                              Size="ButtonSize.Medium"
-                              Style="border-radius: 0.55rem; flex: 2; background-color: #4f46e5;"
-                              IsBusy="@isAnalyzing"
-                              Disabled="@(filtroArticoloId == null || isAnalyzing || isActionLoading)"
-                              Click="AnalizzaCommentiArticoloSelezionato" />
-
+            <div class="col-md-2 col-lg-2 text-end">
                 <RadzenButton Icon="filter_alt_off"
                               Text="Azzera"
                               Variant="Variant.Outlined"
                               ButtonStyle="ButtonStyle.Secondary"
                               Size="ButtonSize.Medium"
-                              Style="border-radius: 0.55rem; flex: 1;"
+                              Style="border-radius: 0.55rem; width: 100%;"
                               Click="ResetFiltri" />
             </div>
         </div>
@@ -137,12 +119,12 @@
             <Columns>
 
                 <!-- Autore -->
-                <RadzenDataGridColumn TItem="Commento" Property="Autore.Cognome" Title="Autore" MinWidth="170px">
+                <RadzenDataGridColumn TItem="Commento" Property="Autore.Cognome" Title="Autore" MinWidth="180px">
                     <Template Context="c">
                         <div class="d-flex align-items-center gap-2 py-1">
-                            <DiceBearAvatar Email="@c.Autore?.Username" Style="width: 2.2em; height: 2.2em; border-radius: 0.45rem; flex-shrink: 0;" />
+                            <DiceBearAvatar Email="@c.Autore?.Username" Style="width: 2.3em; height: 2.3em; border-radius: 0.45rem; flex-shrink: 0;" />
                             <div class="min-w-0">
-                                <span class="fw-bold text-dark d-block small text-truncate" style="max-width: 10rem;">
+                                <span class="fw-bold text-dark d-block small">
                                     @(c.Autore != null ? $"{c.Autore.Nome} {c.Autore.Cognome}" : "Anonimo")
                                 </span>
                                 <span class="text-muted" style="font-size: 0.72rem;">@@@c.Autore?.Username</span>
@@ -152,7 +134,7 @@
                 </RadzenDataGridColumn>
 
                 <!-- Testo Commento -->
-                <RadzenDataGridColumn TItem="Commento" Property="TestoCommento" Title="Commento" MinWidth="220px">
+                <RadzenDataGridColumn TItem="Commento" Property="TestoCommento" Title="Commento" MinWidth="240px">
                     <Template Context="c">
                         <div class="p-2 rounded-2 bg-light border text-dark" style="font-size: 0.85rem; line-height: 1.45; word-break: break-word;">
                             @c.TestoCommento
@@ -161,7 +143,7 @@
                 </RadzenDataGridColumn>
 
                 <!-- Sentiment Azure AI -->
-                <RadzenDataGridColumn TItem="Commento" Property="Sentiment" Title="Sentiment" Width="170px">
+                <RadzenDataGridColumn TItem="Commento" Property="Sentiment" Title="Sentiment" Width="150px">
                     <Template Context="c">
                         <div class="d-flex flex-column gap-1">
                             <span class="badge @GetBadgeColor(c.Sentiment)" style="width: fit-content;">
@@ -178,7 +160,7 @@
                 </RadzenDataGridColumn>
 
                 <!-- Articolo Collegato -->
-                <RadzenDataGridColumn TItem="Commento" Property="Articolo.Titolo" Title="Articolo" MinWidth="160px">
+                <RadzenDataGridColumn TItem="Commento" Property="Articolo.Titolo" Title="Articolo" MinWidth="170px">
                     <Template Context="c">
                         @if (c.Articolo != null)
                         {
@@ -190,6 +172,10 @@
                             </a>
                             <span class="text-muted" style="font-size: 0.7rem;">ID: #@c.FK_Articolo</span>
                         }
+                        else
+                        {
+                            <span class="text-muted small fst-italic">Articolo rimosso</span>
+                        }
                     </Template>
                 </RadzenDataGridColumn>
 
@@ -197,7 +183,8 @@
                 <RadzenDataGridColumn TItem="Commento" 
                                       Property="DataPubblicazione" 
                                       Title="Data" 
-                                      Width="130px">
+                                      Width="140px"
+                                      FormatString="{0:dd/MM/yy, HH:mm}">
                     <Template Context="c">
                         <span class="text-muted small" style="font-size: 0.78rem;">
                             @c.DataPubblicazione.ToLocalTime().ToString("dd/MM/yy, HH:mm")
@@ -206,16 +193,27 @@
                 </RadzenDataGridColumn>
 
                 <!-- Azioni -->
-                <RadzenDataGridColumn TItem="Commento" Title="Azioni" Width="90px" Sortable="false" Filterable="false" TextAlign="TextAlign.Right">
+                <RadzenDataGridColumn TItem="Commento" Title="Azioni" Width="110px" Sortable="false" Filterable="false" TextAlign="TextAlign.Right">
                     <Template Context="c">
-                        <RadzenButton Icon="delete"
-                                      Variant="Variant.Outlined"
-                                      ButtonStyle="ButtonStyle.Danger"
-                                      Size="ButtonSize.Small"
-                                      Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
-                                      Title="Elimina Commento"
-                                      Disabled="@isActionLoading"
-                                      Click="() => EliminaCommento(c)" />
+                        <div class="d-flex justify-content-end gap-1.5 pe-2">
+                            @if (c.Articolo != null)
+                            {
+                                <a href="/post/@c.FK_Articolo"
+                                   class="btn btn-sm btn-outline-secondary"
+                                   style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
+                                   title="Vedi nel Post">
+                                    <RadzenIcon Icon="visibility" Style="font-size: 0.9em;" />
+                                </a>
+                            }
+                            <RadzenButton Icon="delete"
+                                          Variant="Variant.Outlined"
+                                          ButtonStyle="ButtonStyle.Danger"
+                                          Size="ButtonSize.Small"
+                                          Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
+                                          Title="Elimina Commento"
+                                          Disabled="@isActionLoading"
+                                          Click="() => EliminaCommento(c)" />
+                        </div>
                     </Template>
                 </RadzenDataGridColumn>
 
@@ -228,32 +226,24 @@
     private RadzenDataGrid<Commento>? grid;
     private bool isLoading = true;
     private bool isActionLoading = false;
-    private bool isAnalyzing = false;
     private CancellationTokenSource cts = new();
 
     private List<Commento> commenti = new();
     private List<Commento> commentiFiltrati = new();
-    private List<Articolo> articoliDisponibili = new();
-
     private string filtroTesto = string.Empty;
-    private int? filtroArticoloId;
+    private DateTime? filtroData;
 
     protected override async Task OnInitializedAsync()
     {
-        await CaricaDati();
+        await CaricaCommenti();
     }
 
-    private async Task CaricaDati()
+    private async Task CaricaCommenti()
     {
         isLoading = true;
         try
         {
             using var context = await DbFactory.CreateDbContextAsync(cts.Token);
-
-            articoliDisponibili = await context.Articoli
-                .AsNoTracking()
-                .OrderBy(a => a.Titolo)
-                .ToListAsync(cts.Token);
 
             commenti = await context.Commenti
                 .AsNoTracking()
@@ -266,7 +256,7 @@
         }
         catch (OperationCanceledException)
         {
-            // Pagina cambiata dall'utente in fase di caricamento
+            // Query annullata in modo pulito se l'utente cambia rotta
         }
         catch (Exception ex)
         {
@@ -290,9 +280,9 @@
             (string.IsNullOrWhiteSpace(filtroTesto) ||
              c.TestoCommento.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase) ||
              (c.Autore != null && $"{c.Autore.Nome} {c.Autore.Cognome}".Contains(filtroTesto, StringComparison.OrdinalIgnoreCase)) ||
-             (c.Autore != null && c.Autore.Username.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase))) &&
-            (!filtroArticoloId.HasValue || c.FK_Articolo == filtroArticoloId.Value)
-        ).ToList();
+             (c.Autore != null && c.Autore.Username.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase)) ||
+             (c.Articolo != null && c.Articolo.Titolo.Contains(filtroTesto, StringComparison.OrdinalIgnoreCase))) &&
+            (!filtroData.HasValue || c.DataPubblicazione.Date == filtroData.Value.Date)).ToList();
     }
 
     private void OnFiltroTestoChanged(ChangeEventArgs e)
@@ -302,9 +292,9 @@
         if (grid != null) grid.FirstPage();
     }
 
-    private void OnFiltroArticoloChanged(int? value)
+    private void OnFiltroDataChanged(DateTime? value)
     {
-        filtroArticoloId = value;
+        filtroData = value;
         ApplicaFiltri();
         if (grid != null) grid.FirstPage();
     }
@@ -312,71 +302,9 @@
     private void ResetFiltri()
     {
         filtroTesto = string.Empty;
-        filtroArticoloId = null;
+        filtroData = null;
         ApplicaFiltri();
         if (grid != null) grid.FirstPage();
-    }
-
-    private async Task AnalizzaCommentiArticoloSelezionato()
-    {
-        if (filtroArticoloId == null || isAnalyzing) return;
-
-        isAnalyzing = true;
-        try
-        {
-            using var context = await DbFactory.CreateDbContextAsync();
-
-            var targetCommenti = await context.Commenti
-                .Where(c => c.FK_Articolo == filtroArticoloId.Value && (c.Sentiment == "Da analizzare" || c.Sentiment == "Neutral"))
-                .ToListAsync();
-
-            if (!targetCommenti.Any())
-            {
-                NotificationService.Notify(new NotificationMessage
-                {
-                    Severity = NotificationSeverity.Info,
-                    Summary = "Nessun commento da analizzare",
-                    Detail = "I commenti per questo articolo sono già stati tutti analizzati.",
-                    Duration = 3000
-                });
-                return;
-            }
-
-            foreach (var comm in targetCommenti)
-            {
-                var result = await SentimentService.AnalyzeSentimentAsync(comm.TestoCommento);
-                comm.Sentiment = result.Sentiment;
-                comm.PositiveScore = result.Pos;
-                comm.NeutralScore = result.Neu;
-                comm.NegativeScore = result.Neg;
-            }
-
-            await context.SaveChangesAsync();
-
-            NotificationService.Notify(new NotificationMessage
-            {
-                Severity = NotificationSeverity.Success,
-                Summary = "Analisi Completata",
-                Detail = $"Analizzati con successo {targetCommenti.Count} commenti tramite Azure AI.",
-                Duration = 3500
-            });
-
-            await CaricaDati();
-        }
-        catch (Exception ex)
-        {
-            NotificationService.Notify(new NotificationMessage
-            {
-                Severity = NotificationSeverity.Error,
-                Summary = "Errore Analisi AI",
-                Detail = ex.Message,
-                Duration = 4000
-            });
-        }
-        finally
-        {
-            isAnalyzing = false;
-        }
     }
 
     private async Task EliminaCommento(Commento target)
@@ -386,8 +314,12 @@
 
         try
         {
+            string nomeAutore = target.Autore != null 
+                ? $"{target.Autore.Nome} {target.Autore.Cognome}" 
+                : "un utente rimosso/anonimo";
+
             bool conferma = await DialogService.Confirm(
-                "Sei sicuro di voler eliminare questo commento?", 
+                $"Sei sicuro di voler eliminare il commento scritto da {nomeAutore}?", 
                 "Conferma Eliminazione", 
                 new ConfirmOptions() { OkButtonText = "Sì, Elimina", CancelButtonText = "Annulla" }) ?? false;
 
@@ -410,7 +342,10 @@
                     Duration = 2500
                 });
 
-                if (grid != null) await grid.Reload();
+                if (grid != null)
+                {
+                    await grid.Reload();
+                }
             }
         }
         catch (Exception ex)

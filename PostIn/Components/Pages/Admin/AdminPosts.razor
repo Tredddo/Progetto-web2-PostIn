@@ -6,10 +6,12 @@
 @using Microsoft.AspNetCore.Authorization
 @using PostIn.Data
 @using PostIn.Data.Entities
+@using PostIn.Services
 @using Radzen
 @using Radzen.Blazor
 
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject SentimentService SentimentService
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
 @inject DialogService DialogService
@@ -32,9 +34,18 @@
             </div>
             <p class="text-muted small mb-0">Supervisione, analisi statistiche e moderazione di tutte le pubblicazioni aziendali</p>
         </div>
-        <span class="count-badge-header">
-            <strong>@articoli.Count</strong> @(articoli.Count == 1 ? "articolo totale" : "articoli totali")
-        </span>
+        
+        <div class="d-flex align-items-center gap-3">
+            <!-- Toggle per mostrare/nascondere il tasto Sentiment Analysis -->
+            <div class="d-flex align-items-center gap-2 bg-light px-3 py-1.5 rounded-3 border">
+                <RadzenSwitch @bind-Value="mostraPulsanteSentiment" Size="ToggleSwitchSize.Small" />
+                <span class="small fw-semibold text-dark" style="font-size: 0.78rem;">Strumenti AI</span>
+            </div>
+
+            <span class="count-badge-header">
+                <strong>@articoli.Count</strong> @(articoli.Count == 1 ? "articolo totale" : "articoli totali")
+            </span>
+        </div>
     </header>
 
     <!-- NAVIGAZIONE ADMIN -->
@@ -225,9 +236,22 @@
                 </RadzenDataGridColumn>
 
                 <!-- Azioni -->
-                <RadzenDataGridColumn TItem="AdminArticoloViewModel" Title="Azioni" Width="100px" Sortable="false" Filterable="false" TextAlign="TextAlign.Right">
+                <RadzenDataGridColumn TItem="AdminArticoloViewModel" Title="Azioni" MinWidth="130px" Sortable="false" Filterable="false" TextAlign="TextAlign.Right">
                     <Template Context="art">
                         <div class="d-flex justify-content-end gap-1 pe-1">
+                            @if (mostraPulsanteSentiment)
+                            {
+                                <RadzenButton Icon="psychology"
+                                              Variant="Variant.Outlined"
+                                              ButtonStyle="ButtonStyle.Primary"
+                                              Size="ButtonSize.Small"
+                                              Style="border-radius: 0.45rem; padding: 0.25rem 0.5rem; color: #4f46e5; border-color: #c7d2fe;"
+                                              Title="Esegui Sentiment Analysis sui commenti"
+                                              IsBusy="@(isAnalyzingMap.ContainsKey(art.ID_Articolo) && isAnalyzingMap[art.ID_Articolo])"
+                                              Disabled="@(isActionLoading || art.CommentiCount == 0)"
+                                              Click="() => EseguiSentimentAnalysisArticolo(art)" />
+                            }
+
                             <a href="/post/@art.ID_Articolo"
                                class="btn btn-sm btn-outline-secondary"
                                style="border-radius: 0.45rem; padding: 0.25rem 0.5rem;"
@@ -271,6 +295,8 @@
     private RadzenDataGrid<AdminArticoloViewModel>? grid;
     private bool isLoading = true;
     private bool isActionLoading = false;
+    private bool mostraPulsanteSentiment = true;
+    private Dictionary<int, bool> isAnalyzingMap = new();
     private CancellationTokenSource cts = new();
 
     private List<AdminArticoloViewModel> articoli = new();
@@ -389,6 +415,67 @@
         filtroDataA = null;
         ApplicaFiltri();
         if (grid != null) grid.FirstPage();
+    }
+
+    private async Task EseguiSentimentAnalysisArticolo(AdminArticoloViewModel target)
+    {
+        isAnalyzingMap[target.ID_Articolo] = true;
+        StateHasChanged();
+
+        try
+        {
+            using var context = await DbFactory.CreateDbContextAsync();
+
+            var targetCommenti = await context.Commenti
+                .Where(c => c.FK_Articolo == target.ID_Articolo && (c.Sentiment == "Da analizzare" || c.Sentiment == "Neutral" || c.Sentiment == "Unknown"))
+                .ToListAsync();
+
+            if (!targetCommenti.Any())
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Info,
+                    Summary = "Tutti analizzati",
+                    Detail = $"Tutti i commenti dell'articolo #{target.ID_Articolo} sono già stati analizzati.",
+                    Duration = 3000
+                });
+                return;
+            }
+
+            foreach (var comm in targetCommenti)
+            {
+                var result = await SentimentService.AnalyzeSentimentAsync(comm.TestoCommento);
+                comm.Sentiment = result.Sentiment;
+                comm.PositiveScore = result.Pos;
+                comm.NeutralScore = result.Neu;
+                comm.NegativeScore = result.Neg;
+            }
+
+            await context.SaveChangesAsync();
+
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Success,
+                Summary = "Analisi Completata",
+                Detail = $"Analizzati con successo {targetCommenti.Count} commenti per l'articolo '{target.Titolo}'.",
+                Duration = 3500
+            });
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Errore Analisi AI",
+                Detail = ex.Message,
+                Duration = 4000
+            });
+        }
+        finally
+        {
+            isAnalyzingMap[target.ID_Articolo] = false;
+            StateHasChanged();
+        }
     }
 
     private async Task EliminaArticolo(AdminArticoloViewModel target)
